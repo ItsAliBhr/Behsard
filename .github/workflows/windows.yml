@@ -1,0 +1,102 @@
+name: windows-build
+
+on:
+  push:
+    tags: ["v*"]
+    branches: ["main", "claude/**"]
+    paths-ignore: ["docs/**", "**.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then v="$GITHUB_REF_NAME"; else v="dev-${GITHUB_SHA::7}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Build portable zip
+        shell: pwsh
+        run: ./packaging/build_windows.ps1 -Version "${{ steps.ver.outputs.version }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: behsard-windows
+          path: dist/Behsard-windows-x64-*.zip
+          retention-days: 14
+
+  acceptance:
+    # Clean runner: unzip the build, start it, check /health, run the
+    # Playwright smoke test against it and replay a synthetic video.
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: behsard-windows
+          path: artifact
+      - name: Unzip and start Behsard.exe
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem artifact -Filter *.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath C:\bt
+          Start-Process -FilePath C:\bt\Behsard\Behsard.exe -ArgumentList "--no-browser","--port","8000" -WorkingDirectory C:\bt\Behsard -RedirectStandardOutput C:\bt\stdout.txt -RedirectStandardError C:\bt\stderr.txt
+          $ok = $false
+          for ($i = 0; $i -lt 90; $i++) {
+            try { $r = Invoke-RestMethod http://127.0.0.1:8000/health -TimeoutSec 2; if ($r.status -eq "ok") { $ok = $true; break } } catch {}
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ok) { Get-Content C:\bt\stdout.txt, C:\bt\stderr.txt; throw "/health not OK" }
+          Write-Host "health OK"
+          if (-not (Test-Path C:\bt\Behsard\config\behsard.yaml)) { throw "first run did not create config" }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test tools (not part of the app)
+        shell: pwsh
+        run: |
+          python -m pip install ".[dev]"
+          python -m playwright install chromium
+          behsard gen-synth-video --out C:\vid_smoke --seed 2 --cartons 6 | Out-Null
+          behsard gen-synth-video --out C:\vid_replay --seed 0 --cartons 8 | Out-Null
+      - name: Playwright smoke test against the packaged app
+        shell: pwsh
+        env:
+          BEHSARD_URL: http://127.0.0.1:8000
+          BEHSARD_E2E_VIDEO_DIR: C:\vid_smoke
+        run: python -m pytest tests/e2e -v -p no:cacheprovider
+      - name: Replay synthetic video end-to-end
+        shell: pwsh
+        run: python scripts/replay_check.py http://127.0.0.1:8000 C:\vid_replay
+      - name: App logs
+        if: always()
+        shell: pwsh
+        run: |
+          Get-Content C:\bt\Behsard\data\logs\behsard.log -Tail 200 -ErrorAction SilentlyContinue
+          Get-Content C:\bt\stderr.txt -Tail 100 -ErrorAction SilentlyContinue
+
+  release:
+    needs: [build, acceptance]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: behsard-windows
+          path: artifact
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifact/*.zip
+          generate_release_notes: true
