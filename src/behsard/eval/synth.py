@@ -25,16 +25,17 @@ from PIL import Image, ImageDraw, ImageFont
 BACKGROUNDS = ("kraft", "kraft_print", "white_red")
 LETTERS = string.ascii_uppercase
 
-_FONT_CANDIDATES = (
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-    "/usr/share/fonts/truetype/crosextra/Carlito-Bold.ttf",
-    "/usr/share/fonts/opentype/inter/Inter-Bold.otf",
-    "C:/Windows/Fonts/arialbd.ttf",
-    "C:/Windows/Fonts/verdanab.ttf",
-    "C:/Windows/Fonts/tahomabd.ttf",
-    "C:/Windows/Fonts/segoeuib.ttf",
+_FONT_DIR = Path(__file__).resolve().parent.parent / "recognition" / "fonts"
+# Bundled fonts only, so templates are identical on every machine.
+_FONT_CANDIDATES = tuple(
+    str(_FONT_DIR / n)
+    for n in (
+        "DejaVuSans-Bold.ttf",
+        "LiberationSans-Bold.ttf",
+        "FreeSansBold.ttf",
+        "Carlito-Bold.ttf",
+        "Inter-Bold.otf",
+    )
 )
 
 

@@ -49,7 +49,8 @@ def app_url(tmp_path_factory) -> str:
     if url:
         for _ in range(120):
             if _healthy(url):
-                return url
+                yield url  # generator fixture: must yield, not return
+                return
             time.sleep(1)
         pytest.fail(f"{url} is not healthy")
     home = tmp_path_factory.mktemp("apphome")

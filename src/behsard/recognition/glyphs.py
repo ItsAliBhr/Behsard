@@ -21,15 +21,17 @@ LETTERS = string.ascii_uppercase
 DIGITS = string.digits
 NORM = 32  # glyphs are compared as NORM x NORM images
 
-_FONT_CANDIDATES = (
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-    "/usr/share/fonts/truetype/crosextra/Carlito-Bold.ttf",
-    "/usr/share/fonts/opentype/inter/Inter-Bold.otf",
-    "C:/Windows/Fonts/arialbd.ttf",
-    "C:/Windows/Fonts/verdanab.ttf",
-    "C:/Windows/Fonts/tahomabd.ttf",
+_FONT_DIR = Path(__file__).resolve().parent / "fonts"
+# Bundled fonts only, so templates are identical on every machine.
+_FONT_CANDIDATES = tuple(
+    str(_FONT_DIR / n)
+    for n in (
+        "DejaVuSans-Bold.ttf",
+        "LiberationSans-Bold.ttf",
+        "FreeSansBold.ttf",
+        "Carlito-Bold.ttf",
+        "Inter-Bold.otf",
+    )
 )
 
 

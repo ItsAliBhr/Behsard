@@ -32,7 +32,7 @@ behsard-app = "behsard.launcher:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-behsard = ["web/templates/*.html", "web/static/*", "core/schema.sql", "default_config.yaml"]
+behsard = ["web/templates/*.html", "web/static/*", "core/schema.sql", "default_config.yaml", "recognition/fonts/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
