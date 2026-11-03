@@ -10,7 +10,7 @@ A new session should read this file first, then `CLAUDE.md`.
 | 1 | Scaffold + domain model | done |
 | 2 | Synthetic data + eval harness | done |
 | 3 | StampRecognizer v1 | done |
-| 4 | Offline video pipeline | todo |
+| 4 | Offline video pipeline | done (synthetic-validated; real handheld clips not trackable) |
 | 5 | Manual review UI | todo |
 | 6 | Shift admin + reports | todo |
 | 7 | Live capture | skipped (after camera tests) |
@@ -100,6 +100,57 @@ Ideas not done yet (next steps for recognition):
 - Restrict the search to a per-camera ROI (carton face) to cut clutter.
 - Plastic crates with paper liner: out of scope for v1 (tagged `crate`).
 
+## Task 4 — Offline video pipeline
+
+Plan: per camera, track cartons by belt displacement + carton seams (not by
+frames), pick best frames, pair L/R sightings into one CartonEvent, recognise
+against the active stamps, write events + media; CLI with per-stamp summary.
+
+Done:
+- `tracking/tracker.py` `CartonTracker`:
+  - belt shift per frame = phase correlation restricted to the columns that
+    changed (so a partly visible carton is not swamped by static background);
+    integrated into `offset`; conveyor coordinate `u = x - offset`.
+  - carton edges = column peaks of |dI/dx| (40th percentile over the band, so
+    stamps/prints don't count); tracked in `u`; **confirmed** only after ≥2
+    consecutive-frame steps whose image motion equals the belt step (rejects
+    static background and aliasing on periodic rollers/posts).
+  - a confirmed edge crossing the counting line = boundary; consecutive
+    boundaries with a plausible width (25%–160% of the view) = one carton.
+  - frame buffer keyed by belt offset (≥2 px apart; while stopped only the
+    sharpest is kept). Best frames = carton most centred, then sharpest;
+    **cropped to the carton's own extent** (neighbouring cartons are in view
+    and their stamps must not leak in). Full frames kept for review.
+  - event time = moment the belt offset put the carton centre on the line
+    (correct under stop-and-go).
+  - `pair_sightings`: greedy time matching of L and R sightings within
+    `pair_window_s`; unmatched sightings stay single (never double counted).
+- `tracking/pipeline.py` `Pipeline.run(inputs, start)`: track → pair →
+  `ShiftService.active_stamps` at event time → recognizer on all frames of
+  both sides → `CartonEvent` (recognized / pending_review), media saved under
+  `media/YYYYMMDD/conveyorN/` (paths stored relative to media dir),
+  `RecognitionResult` for audit. No open shift → pending_review.
+- `eval/synth_video.py` + `behsard gen-synth-video`: touching cartons,
+  stop-and-go with ramps, motion blur on cartons, periodic static background,
+  stamps on one side, mirrored right camera, `truth.json`.
+- CLI: `behsard process-video --video V --camera ID [--video V2 --camera ID2]
+  --start ISO [--conveyor N --side L]` prints the per-stamp summary.
+- Tests: `tests/test_tracking.py`.
+
+Results:
+- Synthetic video pairs (seeds 0,1,2; 8 cartons each, stop-and-go): 24/24
+  cartons counted, every event merged from both sides; one extra event
+  (single spurious left-side sighting, seed 1). Recognition: 18/20 stamped
+  cartons auto-credited, 2 to review, **0 wrong credits**; unstamped → review.
+- Real sample videos (`IMG_5796`, `IMG_5797`): **0 cartons tracked.** These are
+  handheld phone clips; the camera moves and pans, IMG_5797 looks along the
+  conveyor in perspective, and kraft-to-kraft seams are weak/blurred. They do
+  not match the planned fixed straight-on mounting, so they cannot validate
+  the tracker; tried looser edge thresholds without success. **Next step:**
+  record 1–2 minutes with the real mounted camera (fixed, manual exposure)
+  and tune `TrackerParams` (`roi`, `edge_k`, `edge_rel`, `min_carton_frac`).
+  The recognizer was evaluated on frames from these clips instead (Task 3).
+
 ## Decisions
 
 - **Timestamps** are naive local site time stored as ISO strings. Single site,
@@ -134,6 +185,12 @@ Ideas not done yet (next steps for recognition):
 - `OMP_THREAD_LIMIT=1` for Tesseract (otherwise parallel workers thrash).
 - Accept threshold 0.45 chosen from sweeps: keeps error ≤ 3% on synthetic dev
   and 0% on real frames. Wrong credits are worse than manual reviews.
+- **Counting by seams in conveyor coordinates**, not by photo-eye or frame
+  counting: cartons touch and stop, so only travelled distance + seam
+  crossings are reliable. Carton width limits assume one carton is 25–160% of
+  the view (40–50 cm carton in a ~1 m field of view at 45 cm).
+- Default processing at 10 fps (all frames of 10 fps video); the edge
+  confirmation needs small frame-to-frame motion.
 - The real-frame test active set deliberately contains one-character
   confusers of A12 (A17, B12, K12, R12, H11, M21) to be pessimistic.
 

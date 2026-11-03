@@ -206,7 +206,8 @@ class StampRecognizer:
         # agreement across several images of the same carton adds confidence
         for code in active:
             extra = max(0, len(support[code]) - 1)
-            per_code[code] = min(1.0, per_code[code] + 0.05 * extra)
+            # not capped: capping at 1.0 makes several codes tie
+            per_code[code] = per_code[code] + 0.05 * min(extra, 3)
         ranked = sorted(per_code.items(), key=lambda kv: kv[1], reverse=True)
         best_code, best = ranked[0]
         second = ranked[1][1] if len(ranked) > 1 else 0.0

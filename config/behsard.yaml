@@ -32,7 +32,7 @@ recognition:
 tracking:
   # Region of interest (fractions of the frame) where the carton face is seen.
   roi: [0.0, 0.0, 1.0, 1.0]
-  process_fps: 5
+  process_fps: 10
   # Max seconds between the L and R sightings of the same carton.
   pair_window_s: 1.5
   frames_per_sighting: 3

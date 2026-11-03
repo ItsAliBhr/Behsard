@@ -24,7 +24,7 @@ class RecognitionConfig:
 @dataclass
 class TrackingConfig:
     roi: tuple[float, float, float, float] = (0.0, 0.0, 1.0, 1.0)
-    process_fps: float = 5.0
+    process_fps: float = 10.0
     pair_window_s: float = 1.5
     frames_per_sighting: int = 3
 
