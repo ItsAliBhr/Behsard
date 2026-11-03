@@ -1,0 +1,44 @@
+<div id="assignments">
+{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+{% if message %}<div class="flash ok">ثبت شد: <span class="ltr">{{ message }}</span></div>{% endif %}
+{% if not shift.end_at %}
+<div class="card">
+  <form hx-post="/shifts/{{ shift.id }}/assign" hx-target="#assignments" hx-swap="outerHTML"
+        style="display:flex; gap:10px; align-items:end; flex-wrap:wrap">
+    <label>کارگر<br><input name="worker" id="worker-input" list="workers" required autocomplete="off" autofocus value="{{ form_worker or '' }}"></label>
+    <datalist id="workers">{% for w in workers %}<option value="{{ w.name }}">{% endfor %}</datalist>
+    <label>مهر<br><input name="stamp" required size="5" maxlength="3" class="ltr" placeholder="A12" style="text-transform:uppercase" value="{{ form_stamp or '' }}"></label>
+    <label>نقاله<br>
+      <select name="conveyor">
+        {% for c in conveyors %}<option value="{{ c.id }}" {{ 'selected' if last_conveyor == c.id }}>{{ c.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="primary">افزودن</button>
+  </form>
+  {% if prev_shifts %}
+  <form hx-post="/shifts/{{ shift.id }}/copy" hx-target="#assignments" hx-swap="outerHTML" style="margin-top:10px">
+    <select name="from_shift">{% for s in prev_shifts %}<option value="{{ s.id }}">{{ s.name }} · {{ s.start_at|jdt|fa }}</option>{% endfor %}</select>
+    <button>کپی تخصیص‌ها از این شیفت</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+{% for c in conveyors %}
+{% set crow = rows|selectattr("conveyor_id", "equalto", c.id)|list %}
+<div class="card">
+  <h3 style="margin-top:0">{{ c.name }} <span class="muted" style="font-size:13px">({{ crow|length|fa }} کارگر · ضریب {{ c.coefficient|fa }})</span></h3>
+  {% if crow %}
+  <table>
+    <tr><th>مهر</th><th>کارگر</th><th></th></tr>
+    {% for r in crow|sort(attribute="stamp") %}
+    <tr>
+      <td><b class="ltr">{{ r.stamp }}</b></td><td>{{ r.worker }}</td>
+      <td>{% if not shift.end_at %}<button hx-post="/shifts/{{ shift.id }}/unassign/{{ r.id }}" hx-target="#assignments" hx-swap="outerHTML" hx-confirm="حذف شود؟">حذف</button>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">بدون تخصیص</p>{% endif %}
+</div>
+{% endfor %}
+<script>document.getElementById("worker-input") && document.getElementById("worker-input").focus();</script>
+</div>

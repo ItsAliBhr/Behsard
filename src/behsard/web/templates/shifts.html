@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}شیفت‌ها{% endblock %}
+{% block content %}
+{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+<div class="card">
+  <h2 style="margin-top:0">شروع شیفت جدید</h2>
+  <form method="post" action="/shifts/open" style="display:flex; gap:10px; align-items:end; flex-wrap:wrap">
+    <label>نام شیفت<br>
+      <input name="name" list="shift-names" value="صبح" required autofocus>
+      <datalist id="shift-names"><option value="صبح"><option value="عصر"><option value="شب"></datalist>
+    </label>
+    <label>کپی تخصیص‌ها از<br>
+      <select name="copy_from">
+        <option value="">— بدون کپی —</option>
+        {% for s in shifts %}<option value="{{ s.id }}" {{ 'selected' if loop.first }}>{{ s.name }} · {{ s.start_at|jdt|fa }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="primary">شروع شیفت (اکنون: {{ now|jdt|fa }})</button>
+  </form>
+</div>
+<div class="card">
+  <h2 style="margin-top:0">شیفت‌های اخیر</h2>
+  <table>
+    <tr><th>شیفت</th><th>شروع</th><th>پایان</th><th>تعداد تخصیص</th><th></th></tr>
+    {% for s in shifts %}
+    <tr>
+      <td><a href="/shifts/{{ s.id }}">{{ s.name }}</a></td>
+      <td>{{ s.start_at|jdt|fa }}</td>
+      <td>{% if s.end_at %}{{ s.end_at|jdt|fa }}{% else %}<b style="color:var(--ok)">باز</b>{% endif %}</td>
+      <td>{{ counts[s.id]|fa }}</td>
+      <td>
+        <a href="/shifts/{{ s.id }}">تخصیص‌ها</a>
+        {% if not s.end_at %}
+        <form method="post" action="/shifts/{{ s.id }}/close" style="display:inline" onsubmit="return confirm('شیفت بسته شود؟')">
+          <button>بستن شیفت</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">هنوز شیفتی ثبت نشده است.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

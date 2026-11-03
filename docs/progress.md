@@ -12,7 +12,7 @@ A new session should read this file first, then `CLAUDE.md`.
 | 3 | StampRecognizer v1 | done |
 | 4 | Offline video pipeline | done (synthetic-validated; real handheld clips not trackable) |
 | 5 | Manual review UI | done |
-| 6 | Shift admin + reports | todo |
+| 6 | Shift admin + reports | done |
 | 7 | Live capture | skipped (after camera tests) |
 
 ## Environment notes
@@ -176,6 +176,39 @@ Done:
 - Verified in headless Chromium on a demo DB built from a synthetic video
   (screenshot: `docs/review-ui.png`); tests in `tests/test_review.py`.
 
+## Task 6 — Shift admin + reports
+
+Plan: pages to open/close a shift and assign worker/stamp/conveyor quickly;
+reports per worker/shift/day/conveyor with Jalali dates and Excel export.
+
+Done:
+- `/shifts`: open a shift (name preset صبح/عصر/شب, optional copy of a previous
+  shift's assignments), list, close. `/shifts/{id}`: one-line keyboard form
+  (worker with autocomplete — new names create the worker —, stamp code,
+  conveyor; Enter adds; focus returns to the worker field; conveyor kept),
+  assignments grouped per conveyor with coefficient, delete, copy-from-shift.
+  Errors in Persian (duplicate stamp/worker, bad code, closed shift).
+- `reports/counts.py`: `build_report(repo, start, end)` over credited cartons
+  (recognized + resolved), groupings worker / shift / day / conveyor / detail,
+  `adjusted` = count × conveyor coefficient, pending-review count shown as a
+  warning (not yet counted).
+- `reports/excel.py`: RTL workbook with sheets per grouping, per-carton detail
+  and an info sheet; Jalali dates.
+- `/reports` with Jalali date inputs (Persian or ASCII digits), presets
+  (today, yesterday, 7/30 days), grouping select, Excel download.
+- Verified in headless Chromium (screenshots `docs/shift-ui.png`,
+  `docs/reports-ui.png`); tests in `tests/test_reports_admin.py`.
+
+## What is left / next steps
+
+1. **Task 7 (live capture)** — skipped as instructed: RTSP readers with
+   reconnect, on-disk frame queue, worker feeding `Pipeline`.
+2. **Tune tracking on real mounted-camera footage** (see Task 4 results).
+3. **Recognition:** learn templates from supervisor-confirmed crops
+   (`behsard export-labels`), per-camera ROI, then re-run `behsard eval`.
+4. Plastic crates with paper liner (out of v1 scope).
+5. Login/roles for the web UI if more than one supervisor uses it.
+
 ## Decisions
 
 - **Timestamps** are naive local site time stored as ISO strings. Single site,
@@ -220,6 +253,12 @@ Done:
 - No login in the pilot: the reviewer is recorded as "supervisor".
 - Async route handlers share the single SQLite connection on the event loop
   thread (single supervisor, small queries) — no extra locking needed.
+- **Work day = shift start date**, so a night shift crossing midnight is
+  reported on one day; cartons without a shift use their own date.
+- Reports count only credited cartons (recognized + resolved); pending ones
+  are shown as a warning so incomplete numbers are visible.
+- Per-conveyor coefficient is applied as a separate "adjusted" column; raw
+  counts are never altered.
 - Default processing at 10 fps (all frames of 10 fps video); the edge
   confirmation needs small frame-to-frame motion.
 - The real-frame test active set deliberately contains one-character

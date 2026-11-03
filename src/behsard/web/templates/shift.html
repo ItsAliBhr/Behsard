@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}شیفت {{ shift.name if shift }}{% endblock %}
+{% block content %}
+{% if not shift %}
+<div class="card">شیفت پیدا نشد. <a href="/shifts">بازگشت</a></div>
+{% else %}
+<div class="card">
+  <h2 style="margin-top:0">شیفت {{ shift.name }} <span class="muted" style="font-size:14px">شروع {{ shift.start_at|jdt|fa }}{% if shift.end_at %} · پایان {{ shift.end_at|jdt|fa }}{% else %} · <b style="color:var(--ok)">باز</b>{% endif %}</span></h2>
+  <p class="muted">برای هر کارگر: نام، کد مهر و نقاله را وارد کنید و <kbd>Enter</kbd> بزنید. نقاله انتخاب‌شده برای ردیف بعدی حفظ می‌شود.</p>
+</div>
+{% include "_assignments.html" %}
+{% endif %}
+{% endblock %}

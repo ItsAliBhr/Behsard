@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}گزارش‌ها{% endblock %}
+{% block content %}
+{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+<div class="card">
+  <form method="get" action="/reports" style="display:flex; gap:10px; align-items:end; flex-wrap:wrap">
+    <label>از تاریخ<br><input name="start" value="{{ start|fa }}" size="10" class="ltr"></label>
+    <label>تا تاریخ<br><input name="end" value="{{ end|fa }}" size="10" class="ltr"></label>
+    <label>گروه‌بندی<br>
+      <select name="by">
+        {% for k, v in [("worker","کارگر"),("detail","روز / شیفت / نقاله / کارگر"),("shift","شیفت"),("day","روز"),("conveyor","نقاله")] %}
+        <option value="{{ k }}" {{ 'selected' if by == k }}>{{ v }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="primary">نمایش</button>
+    <a href="/reports/export.xlsx?start={{ start }}&end={{ end }}"><button type="button">خروجی اکسل</button></a>
+    <span class="muted">
+      {% for label, (a, b) in presets.items() %}<a href="/reports?start={{ a }}&end={{ b }}&by={{ by }}">{{ label }}</a>{{ " · " if not loop.last }}{% endfor %}
+    </span>
+  </form>
+</div>
+<div class="card" style="display:flex; gap:40px; flex-wrap:wrap">
+  <div>بازه: <b>{{ start|fa }}</b> تا <b>{{ end|fa }}</b></div>
+  <div>کارتن‌های شمارش‌شده: <b>{{ rep.total|fa }}</b></div>
+  <div>با ضریب نقاله: <b>{{ rep.total_adjusted|fa }}</b></div>
+  <div>{% if rep.pending_review %}<b style="color:var(--warn)">{{ rep.pending_review|fa }} کارتن در انتظار بررسی دستی (هنوز شمارش نشده)</b> · <a href="/review">بررسی</a>{% else %}<span style="color:var(--ok)">همه کارتن‌ها تعیین تکلیف شده‌اند</span>{% endif %}</div>
+</div>
+<div class="card">
+<table>
+  <tr>
+    {% if by in ("shift", "day", "detail") %}<th>روز کاری</th>{% endif %}
+    {% if by in ("shift", "detail") %}<th>شیفت</th>{% endif %}
+    {% if by in ("conveyor", "detail") %}<th>نقاله</th>{% endif %}
+    {% if by in ("worker", "detail") %}<th>کارگر</th><th>مهر</th>{% endif %}
+    <th>تعداد کارتن</th><th>با ضریب نقاله</th>
+  </tr>
+  {% for g in groups %}
+  <tr>
+    {% if by in ("shift", "day", "detail") %}<td>{{ g.day|jdate|fa }}</td>{% endif %}
+    {% if by in ("shift", "detail") %}<td>{{ g.shift_name }}</td>{% endif %}
+    {% if by in ("conveyor", "detail") %}<td>{{ g.conveyor_name }}</td>{% endif %}
+    {% if by in ("worker", "detail") %}<td>{{ g.worker_name }}</td><td><b class="ltr">{{ g.stamp_code }}</b></td>{% endif %}
+    <td class="num">{{ g.count|fa }}</td><td class="num">{{ g.adjusted|fa }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="7" class="muted">در این بازه کارتنی ثبت نشده است.</td></tr>
+  {% endfor %}
+</table>
+</div>
+{% endblock %}

@@ -17,11 +17,19 @@ pip install -e '.[dev]'
 
 ```bash
 behsard init-db                         # create DB, sync conveyors/cameras from config
-python -m pytest                        # tests
+behsard serve                           # web UI: /shifts, /review, /reports (Persian, RTL)
+behsard process-video --video left.mp4 --camera cam1L --video right.mp4 --camera cam1R \
+    --start 2026-11-01T09:00:00         # offline pipeline -> DB, prints per-stamp counts
+behsard gen-synth --out /tmp/synth --n 300 --seed 1      # synthetic stamp images
+behsard eval --data tests/fixtures/frames --by background # evaluate a recognizer
+behsard gen-synth-video --out /tmp/video --seed 0        # synthetic conveyor videos
+behsard export-labels --out /tmp/labels # supervisor decisions as an eval dataset
+python -m pytest                        # tests (~1 min)
 ```
 
-More commands (`gen-synth`, `eval`, `process-video`, `serve`) are added per
-task; run `behsard --help`.
+Daily flow: open a shift and assign worker ↔ stamp ↔ conveyor on `/shifts`,
+the pipeline credits recognised cartons automatically, the supervisor clears
+the `/review` queue by keyboard, `/reports` shows counts (Excel export).
 
 ## Layout
 

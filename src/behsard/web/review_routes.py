@@ -34,6 +34,7 @@ def _card_context(request: Request, event_id: int | None, after: int | None = No
         )
     return {
         "request": request,
+        "nav": "review",
         "ev": ev,
         "conveyor": conveyor,
         "candidates": svc.candidates(ev) if ev else [],
