@@ -11,7 +11,7 @@ A new session should read this file first, then `CLAUDE.md`.
 | 2 | Synthetic data + eval harness | done |
 | 3 | StampRecognizer v1 | done |
 | 4 | Offline video pipeline | done (synthetic-validated; real handheld clips not trackable) |
-| 5 | Manual review UI | todo |
+| 5 | Manual review UI | done |
 | 6 | Shift admin + reports | todo |
 | 7 | Live capture | skipped (after camera tests) |
 
@@ -151,6 +151,31 @@ Results:
   and tune `TrackerParams` (`roi`, `edge_k`, `edge_rel`, `min_carton_frac`).
   The recognizer was evaluated on frames from these clips instead (Task 3).
 
+## Task 5 — Manual review UI
+
+Plan: FastAPI + HTMX, Persian RTL, queue of pending cartons with stamp crop +
+full frame, keyboard-driven resolution against the active stamps of the
+carton's conveyor and shift; every decision stored as a label.
+
+Done:
+- `review/service.py`: `ReviewService` (queue, `candidates(ev)` = active stamps
+  of that conveyor at that time ordered by recognizer score, `resolve`),
+  `reopen` (undo), `export_labels` → eval-format dataset (`behsard
+  export-labels --out DIR`) using the exact carton crops the recognizer saw
+  (`*_carton{i}.jpg`, now saved by the pipeline).
+- `web/app.py` (`create_app`), `web/review_routes.py`, templates `base.html`,
+  `review.html`, `_review_card.html`; `/media` serves saved frames;
+  `htmx.min.js` 1.9.12 vendored in `web/static` (no CDN at runtime).
+- Keyboard: `1`–`9` pick the n-th candidate, type a code (`A12`) + `Enter`,
+  `0` = no stamp, `.` = not a carton, `Space` = skip, `Backspace`/`Esc` edit;
+  uses `event.code` so it works with the Persian keyboard layout; Persian
+  digits typed are normalised. After each decision the next card is swapped
+  in with an undo button.
+- Jalali dates and Persian digits via `web/fa.py` (`jdatetime`).
+- `behsard serve` starts the UI (config `review.host/port`).
+- Verified in headless Chromium on a demo DB built from a synthetic video
+  (screenshot: `docs/review-ui.png`); tests in `tests/test_review.py`.
+
 ## Decisions
 
 - **Timestamps** are naive local site time stored as ISO strings. Single site,
@@ -189,6 +214,12 @@ Results:
   counting: cartons touch and stop, so only travelled distance + seam
   crossings are reliable. Carton width limits assume one carton is 25–160% of
   the view (40–50 cm carton in a ~1 m field of view at 45 cm).
+- **Review candidates are restricted** to stamps active on the carton's
+  conveyor at its time (closed set); a stamp not assigned there cannot be
+  chosen — the supervisor fixes the shift assignment first, or marks no stamp.
+- No login in the pilot: the reviewer is recorded as "supervisor".
+- Async route handlers share the single SQLite connection on the event loop
+  thread (single supervisor, small queries) — no extra locking needed.
 - Default processing at 10 fps (all frames of 10 fps video); the edge
   confirmation needs small frame-to-frame motion.
 - The real-frame test active set deliberately contains one-character

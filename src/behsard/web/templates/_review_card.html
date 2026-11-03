@@ -1,0 +1,65 @@
+<div id="card">
+{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+{% if message %}<div class="flash ok">{{ message }}</div>{% endif %}
+{% if last %}
+<div class="flash ok">
+  ثبت شد: کارتن شماره {{ last.id|fa }} ← <b class="ltr">{{ last.label }}</b>
+  <button hx-post="/review/{{ last.id }}/reopen" hx-target="#card" hx-swap="outerHTML">بازگردانی</button>
+</div>
+{% endif %}
+<div class="pending">در انتظار بررسی: <b>{{ pending|fa }}</b> کارتن</div>
+{% if not ev %}
+  <div class="card"><h2>صف بررسی خالی است.</h2><p class="muted">همه کارتن‌ها تعیین تکلیف شده‌اند.</p></div>
+{% else %}
+<div class="review" style="margin-top:10px">
+  <div class="card imgs">
+    <div class="muted">
+      کارتن شماره {{ ev.id|fa }} · {{ conveyor.name if conveyor else ev.conveyor_id|fa }} ·
+      <span>{{ ev.ts|jdt|fa }}</span> ·
+      وضعیت: {{ ev.status|status_fa }}
+      {% if ev.meta.best_guess %} · حدس سیستم: <b class="ltr">{{ ev.meta.best_guess }}</b> ({{ (ev.confidence * 100)|round|int|fa }}٪){% endif %}
+      {% if ev.meta.sides %} · دوربین: {{ ev.meta.sides|join("، ") }}{% endif %}
+    </div>
+    {% if ev.crop_path %}
+      <div style="margin-top:8px"><img class="crop" src="/media/{{ ev.crop_path }}" alt="crop"></div>
+    {% else %}
+      <p class="muted">برش مهر موجود نیست.</p>
+    {% endif %}
+    {% if ev.frame_path %}<a href="/media/{{ ev.frame_path }}" target="_blank"><img class="full" src="/media/{{ ev.frame_path }}" alt="frame"></a>{% endif %}
+    {% if extra_frames %}
+    <div class="thumbs">{% for f in extra_frames %}<a href="/media/{{ f }}" target="_blank"><img src="/media/{{ f }}"></a>{% endfor %}</div>
+    {% endif %}
+  </div>
+  <div class="card">
+    <form id="resolve-form" hx-post="/review/{{ ev.id }}/resolve" hx-target="#card" hx-swap="outerHTML">
+      <input type="hidden" name="decision" value="stamp">
+      <input type="hidden" name="stamp" value="">
+    </form>
+    <input id="typed" readonly placeholder="کد مهر را تایپ کنید">
+    <div id="typed-hint" class="flash err" style="padding:2px 6px;margin:4px 0 0;min-height:0"></div>
+    <ul class="cands" style="margin-top:10px">
+      {% for c in candidates %}
+      <li data-code="{{ c.code }}" {% if c.key %}data-key="{{ c.key }}"{% endif %} onclick="behsardPick('{{ c.code }}')">
+        {% if c.key %}<kbd>{{ c.key }}</kbd>{% else %}<span style="width:22px"></span>{% endif %}
+        <span class="code">{{ c.code }}</span>
+        <span>{{ c.worker_name }}</span>
+        {% if c.score is not none %}<span class="score">{{ "%.2f"|format(c.score) }}</span>{% endif %}
+      </li>
+      {% else %}
+      <li class="dim">هیچ مهر فعالی برای این نقاله در این زمان ثبت نشده است.</li>
+      {% endfor %}
+    </ul>
+    <div class="actions">
+      <button type="button" onclick="behsardDecide('no_stamp')"><kbd>0</kbd> بدون مهر</button>
+      <button type="button" onclick="behsardDecide('not_carton')"><kbd>.</kbd> کارتن نیست</button>
+      <button type="button" id="skip-link" hx-get="/review/card?after={{ ev.id }}" hx-target="#card" hx-swap="outerHTML"><kbd>Space</kbd> بعدی</button>
+    </div>
+    <div class="help muted">
+      <kbd>1</kbd>…<kbd>9</kbd> انتخاب مهر ·
+      تایپ کد (مثلاً <kbd>A12</kbd>) و <kbd>Enter</kbd> ·
+      <kbd>Backspace</kbd> اصلاح · <kbd>Esc</kbd> پاک کردن
+    </div>
+  </div>
+</div>
+{% endif %}
+</div>

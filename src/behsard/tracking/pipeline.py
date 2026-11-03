@@ -161,7 +161,7 @@ class Pipeline:
         )
         self.repo.add_carton_event(ev)
         assert ev.id is not None
-        ev.frame_path, ev.crop_path = self._save_media(ev, full, res)
+        ev.frame_path, ev.crop_path = self._save_media(ev, full, res, images)
         self.repo.update_carton_event(ev)
         cam = sources[res.image_index][0] if res.image_index is not None and sources else None
         self.repo.add_recognition_result(
@@ -179,8 +179,14 @@ class Pipeline:
         return ev
 
     def _save_media(
-        self, ev: CartonEvent, images: list[np.ndarray], res: Result
+        self,
+        ev: CartonEvent,
+        images: list[np.ndarray],
+        res: Result,
+        carton_images: list[np.ndarray] | None = None,
     ) -> tuple[str | None, str | None]:
+        """Save full frames (context), carton crops (recognizer input) and
+        the stamp crop. ``images`` and ``carton_images`` are index-aligned."""
         if not images:
             return None, None
         d = self.media_dir / ev.ts.strftime("%Y%m%d") / f"conveyor{ev.conveyor_id}"
@@ -192,6 +198,9 @@ class Pipeline:
         for i, img in enumerate(images):
             if i != idx:
                 cv2.imwrite(str(d / f"{ev.id:07d}_frame{i}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        # exactly what the recognizer saw: replayable as labeled data
+        for i, img in enumerate(carton_images or []):
+            cv2.imwrite(str(d / f"{ev.id:07d}_carton{i}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 90])
         crop_path = None
         if res.crop is not None and res.crop.size:
             crop_path = d / f"{ev.id:07d}_crop.png"

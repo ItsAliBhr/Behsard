@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}بهسرد{% endblock %} — شمارش کارتن</title>
+<script src="/static/htmx.min.js"></script>
+<style>
+  :root { --bg:#f6f4ef; --card:#fff; --ink:#222; --muted:#6b6b6b; --accent:#1f5fa8; --ok:#2e7d32; --warn:#b26a00; --bad:#c62828; --line:#ddd; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Tahoma, "Vazirmatn", "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); font-size:15px; }
+  header { background:#2b3440; color:#fff; display:flex; gap:24px; align-items:center; padding:10px 20px; }
+  header a { color:#dfe6ee; text-decoration:none; padding:4px 8px; border-radius:4px; }
+  header a.active, header a:hover { background:#45515f; color:#fff; }
+  header .brand { font-weight:bold; margin-left:20px; }
+  main { padding:16px 20px; max-width:1400px; margin:auto; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:16px; }
+  .muted { color:var(--muted); }
+  .ltr { direction:ltr; unicode-bidi:embed; display:inline-block; }
+  table { border-collapse:collapse; width:100%; background:#fff; }
+  th, td { border:1px solid var(--line); padding:6px 8px; text-align:right; }
+  th { background:#eef1f5; }
+  td.num { text-align:left; direction:ltr; }
+  input, select, button { font:inherit; padding:5px 8px; }
+  button { cursor:pointer; border:1px solid #999; background:#f3f3f3; border-radius:4px; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .flash { padding:8px 12px; border-radius:6px; margin-bottom:10px; }
+  .flash.err { background:#fde8e8; color:var(--bad); }
+  .flash.ok { background:#e8f5e9; color:var(--ok); }
+  kbd { border:1px solid #aaa; border-bottom-width:2px; border-radius:3px; padding:0 5px; background:#fafafa; font-family:monospace; direction:ltr; display:inline-block; }
+  {% block style %}{% endblock %}
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">بهسرد · شمارش کارتن</span>
+  <a href="/review" class="{{ 'active' if nav == 'review' }}">بررسی دستی</a>
+  <a href="/shifts" class="{{ 'active' if nav == 'shifts' }}">شیفت‌ها</a>
+  <a href="/reports" class="{{ 'active' if nav == 'reports' }}">گزارش‌ها</a>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+{% block script %}{% endblock %}
+</body>
+</html>
