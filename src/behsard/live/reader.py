@@ -108,10 +108,10 @@ class CameraReader(threading.Thread):
         self.speed = max(0.1, speed)  # file playback speed (tests / fast replay)
         self.health = CameraHealth()
         self.latest: np.ndarray | None = None  # last frame read (for snapshots)
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
 
     def stop(self) -> None:
-        self._stop.set()
+        self._stop_event.set()
 
     def _open(self) -> cv2.VideoCapture | None:
         src = self.url[len("file://") :] if self.url.startswith("file://") else self.url
@@ -128,7 +128,7 @@ class CameraReader(threading.Thread):
     def run(self) -> None:
         backoff = 0.5
         file_src = is_file_source(self.url)
-        while not self._stop.is_set():
+        while not self._stop_event.is_set():
             self.health.state = "connecting" if self.health.reconnects == 0 else "reconnecting"
             cap = self._open()
             if cap is None:
@@ -145,7 +145,7 @@ class CameraReader(threading.Thread):
                 src_fps = 10.0
             ended = self._read_loop(cap, src_fps, file_src)
             cap.release()
-            if self._stop.is_set():
+            if self._stop_event.is_set():
                 break
             if ended and file_src and not self.loop:
                 self.health.state = "finished"
@@ -163,7 +163,7 @@ class CameraReader(threading.Thread):
         next_due = 0.0
         t_start = time.monotonic()
         n = 0
-        while not self._stop.is_set():
+        while not self._stop_event.is_set():
             if file_src and self.realtime:  # pace a file like a live camera
                 wait = t_start + n / (src_fps * self.speed) - time.monotonic()
                 if wait > 0:
@@ -201,7 +201,7 @@ class CameraReader(threading.Thread):
         return False
 
     def _sleep(self, seconds: float) -> None:
-        self._stop.wait(seconds)
+        self._stop_event.wait(seconds)
 
 
 def grab_snapshot(url: str, timeout_s: float = 8.0) -> np.ndarray | None:

@@ -11,13 +11,13 @@ on:
 jobs:
   test:
     if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # same Tesseract (5.3.4) as the thresholds were measured with
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
       - name: System tools (Tesseract, ffmpeg, MediaMTX)
         run: |
           sudo apt-get update -q
@@ -33,13 +33,13 @@ jobs:
 
   soak:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # same Tesseract (5.3.4) as the thresholds were measured with
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
       - run: |
           sudo apt-get update -q && sudo apt-get install -y -q tesseract-ocr ffmpeg
           pip install -e ".[dev]"

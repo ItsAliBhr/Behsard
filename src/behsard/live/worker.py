@@ -48,7 +48,7 @@ class CameraWorker(threading.Thread):
         self.latest_frame: np.ndarray | None = None
         self.latest_overlay: dict[str, object] = {}
         self.last_label: tuple[str, float, float] | None = None  # (text, conf, time)
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
 
     def submit(self, frame: np.ndarray, ts: datetime) -> None:
         """Called from the reader thread."""
@@ -66,10 +66,10 @@ class CameraWorker(threading.Thread):
                 self.dropped += 1
 
     def stop(self) -> None:
-        self._stop.set()
+        self._stop_event.set()
 
     def run(self) -> None:
-        while not self._stop.is_set():
+        while not self._stop_event.is_set():
             try:
                 frame, ts = self.q.get(timeout=0.2)
             except queue.Empty:
