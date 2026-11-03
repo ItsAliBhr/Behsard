@@ -52,8 +52,20 @@ class ReviewService:
 
     # ---- candidates ----------------------------------------------------
     def candidates(self, ev: CartonEvent) -> list[Candidate]:
-        """Stamps active on the event's conveyor at its time, likeliest first."""
-        active = self.shifts.active_stamps(ev.conveyor_id, ev.ts)
+        """Stamps active on the event's conveyor at its time, likeliest first.
+
+        Test-mode events use the test stamp list they were recognised against.
+        """
+        from behsard.core.services import ActiveStamp
+
+        if ev.mode == "test":
+            active = []
+            for code in ev.meta.get("candidates") or []:  # type: ignore[union-attr]
+                st = self.repo.get_stamp_by_code(str(code))
+                if st is not None and st.id is not None:
+                    active.append(ActiveStamp(st.code, st.id, -1, -1, ev.conveyor_id))
+        else:
+            active = self.shifts.active_stamps(ev.conveyor_id, ev.ts)
         scores = ev.meta.get("scores") or {}
         if not isinstance(scores, dict):
             scores = {}
@@ -70,7 +82,7 @@ class ReviewService:
                     key=i + 1 if i < 9 else None,
                     code=a.code,
                     stamp_id=a.stamp_id,
-                    worker_name=workers.get(a.worker_id, "?"),
+                    worker_name=workers.get(a.worker_id, "آزمایشی" if ev.mode == "test" else "?"),
                     score=float(scores[a.code]) if a.code in scores else None,
                 )
             )

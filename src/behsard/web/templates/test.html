@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}حالت آزمایش{% endblock %}
+{% block content %}
+<div class="card">
+  <h2 style="margin-top:0">حالت آزمایش {% if tm.enabled %}<span class="badge" style="background:var(--ok)">روشن</span>{% else %}<span class="badge" style="background:#777">خاموش</span>{% endif %}</h2>
+  <p class="muted">در حالت آزمایش هر کارتن فقط با فهرست مهرهای زیر مقایسه می‌شود (بدون شیفت) و در شمارش کارگران حساب نمی‌شود. با تأیید یا اصلاح هر کارتن، داده برچسب‌خورده برای تنظیم سیستم جمع می‌شود.</p>
+  <form method="post" action="/test/settings" style="display:flex; gap:10px; align-items:end; flex-wrap:wrap">
+    <label>مهرهای آزمایشی (با فاصله یا ویرگول)<br>
+      <input name="stamps" class="ltr" size="50" value="{{ tm.stamps|join(' ') }}" placeholder="A12 B07 C15"></label>
+    <label><input type="checkbox" name="enabled" {{ 'checked' if tm.enabled }}> روشن</label>
+    <button class="primary" id="save-test">ذخیره</button>
+  </form>
+</div>
+<div class="review">
+  <div>{% include "_review_card.html" %}</div>
+  <div id="acc" hx-get="/test/accuracy" hx-trigger="every 3s">{% include "_test_accuracy.html" %}</div>
+</div>
+{% endblock %}
+{% block script %}
+<script src="/static/review.js"></script>
+<script>
+// new test cartons appear without reloading while the queue is empty
+setInterval(()=>{ if(!document.getElementById('resolve-form')) htmx.ajax('GET','/test/card','#card'); }, 3000);
+</script>
+{% endblock %}

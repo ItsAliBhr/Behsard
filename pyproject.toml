@@ -22,19 +22,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "httpx>=0.27"]
+dev = ["pytest>=8", "httpx>=0.27", "playwright>=1.40", "psutil>=5.9"]
 
 [project.scripts]
 behsard = "behsard.cli:main"
+behsard-app = "behsard.launcher:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-behsard = ["web/templates/*.html", "web/static/*"]
+behsard = ["web/templates/*.html", "web/static/*", "core/schema.sql", "default_config.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-q"
-markers = ["slow: slower tests (tesseract, video)"]
+markers = ["slow: slower tests (tesseract, video)", "e2e: browser tests against a running app", "rtsp: needs MediaMTX + ffmpeg", "soak: long-running resource test"]

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}داشبورد{% endblock %}
+{% block style %}
+  .cams { display:grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap:16px; }
+  .cam img { width:100%; border-radius:6px; background:#222; min-height:200px; }
+  .cam h3 { margin:0 0 8px; display:flex; gap:10px; align-items:center; }
+{% endblock %}
+{% block content %}
+{% if not cameras %}
+<div class="card">
+  <h2 style="margin-top:0">هنوز دوربینی تعریف نشده است.</h2>
+  <p><a href="/cameras/new"><button class="primary">افزودن دوربین</button></a>
+     یا <a href="/replay">یک ویدیوی ضبط‌شده را بازپخش کنید</a>.</p>
+</div>
+{% endif %}
+<div class="cams">
+  {% for cid, h in cameras.items() %}
+  <div class="card cam">
+    <h3>
+      <span id="dot-{{ cid }}" class="{{ 'ok-dot' if h.state == 'connected' else ('warn-dot' if h.state in ('connecting','reconnecting') else 'bad-dot') }}"></span>
+      <span class="ltr">{{ cid }}</span>
+      <span class="muted" style="font-size:14px">نقاله {{ h.conveyor_id|fa }} · سمت {{ 'چپ' if h.side == 'L' else 'راست' }}{% if h.replay %} · بازپخش{% endif %}</span>
+    </h3>
+    <img src="/live/{{ cid }}.mjpg" alt="{{ cid }}">
+  </div>
+  {% endfor %}
+</div>
+<div id="panel" hx-get="/dashboard/panel" hx-trigger="every 2s" hx-swap="innerHTML">
+  {% include "_dashboard_panel.html" %}
+</div>
+{% endblock %}

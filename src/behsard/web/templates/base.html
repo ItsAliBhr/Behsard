@@ -13,6 +13,13 @@
   header a { color:#dfe6ee; text-decoration:none; padding:4px 8px; border-radius:4px; }
   header a.active, header a:hover { background:#45515f; color:#fff; }
   header .brand { font-weight:bold; margin-left:20px; }
+  header { flex-wrap:wrap; gap:8px 18px; font-size:16px; }
+  .badge { background:#e65100; color:#fff; border-radius:10px; padding:0 7px; font-size:13px; }
+  .ok-dot { display:inline-block; width:12px; height:12px; border-radius:6px; background:var(--ok); }
+  .bad-dot { display:inline-block; width:12px; height:12px; border-radius:6px; background:var(--bad); }
+  .warn-dot { display:inline-block; width:12px; height:12px; border-radius:6px; background:var(--warn); }
+  .big { font-size:28px; font-weight:bold; }
+  .grid2 { display:grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap:16px; }
   main { padding:16px 20px; max-width:1400px; margin:auto; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:16px; }
   .muted { color:var(--muted); }
@@ -28,15 +35,37 @@
   .flash.err { background:#fde8e8; color:var(--bad); }
   .flash.ok { background:#e8f5e9; color:var(--ok); }
   kbd { border:1px solid #aaa; border-bottom-width:2px; border-radius:3px; padding:0 5px; background:#fafafa; font-family:monospace; direction:ltr; display:inline-block; }
+
+  .review { display:grid; grid-template-columns: 1fr 360px; gap:16px; }
+  .imgs img.crop { max-width:100%; max-height:260px; border:3px solid var(--accent); border-radius:6px; background:#fff; image-rendering:auto; }
+  .imgs img.full { max-width:100%; max-height:420px; border-radius:6px; margin-top:8px; }
+  .thumbs img { height:90px; margin:4px; border:1px solid var(--line); cursor:zoom-in; }
+  .cands { list-style:none; padding:0; margin:0; }
+  .cands li { display:flex; gap:10px; align-items:center; padding:6px 8px; border:1px solid var(--line); border-radius:6px; margin-bottom:6px; cursor:pointer; }
+  .cands li.hl { background:#e3eefb; border-color:var(--accent); }
+  .cands li.dim { opacity:.35; }
+  .cands .code { font-family:monospace; font-size:20px; font-weight:bold; direction:ltr; }
+  .cands .score { margin-right:auto; color:var(--muted); font-size:12px; direction:ltr; }
+  #typed { font-family:monospace; font-size:22px; width:100%; direction:ltr; text-align:center; letter-spacing:3px; }
+  .actions { display:flex; gap:8px; margin-top:10px; }
+  .actions button { flex:1; }
+  .help { font-size:13px; line-height:2; }
+  .pending { font-size:18px; }
+  #typed-hint:empty { display:none; }
   {% block style %}{% endblock %}
 </style>
 </head>
 <body>
 <header>
   <span class="brand">بهسرد · شمارش کارتن</span>
-  <a href="/review" class="{{ 'active' if nav == 'review' }}">بررسی دستی</a>
+  <a href="/" class="{{ 'active' if nav == 'dashboard' }}">داشبورد</a>
+  <a href="/cameras" class="{{ 'active' if nav == 'cameras' }}">دوربین‌ها</a>
   <a href="/shifts" class="{{ 'active' if nav == 'shifts' }}">شیفت‌ها</a>
+  {% set pb = pending_badge() %}
+  <a href="/review" class="{{ 'active' if nav == 'review' }}">بررسی دستی{% if pb %} <span class="badge" id="pending-badge">{{ pb|fa }}</span>{% endif %}</a>
   <a href="/reports" class="{{ 'active' if nav == 'reports' }}">گزارش‌ها</a>
+  <a href="/test" class="{{ 'active' if nav == 'test' }}">حالت آزمایش</a>
+  <a href="/replay" class="{{ 'active' if nav == 'replay' }}">بازپخش ویدیو</a>
 </header>
 <main>
 {% block content %}{% endblock %}

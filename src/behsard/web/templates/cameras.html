@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}دوربین‌ها{% endblock %}
+{% block content %}
+{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+<div class="card">
+  <h2 style="margin-top:0">دوربین‌ها <a href="/cameras/new"><button class="primary" id="add-camera">+ افزودن دوربین</button></a></h2>
+  <table>
+    <tr><th>شناسه</th><th>نقاله</th><th>سمت</th><th>آدرس</th><th>وضعیت</th><th>ضبط ویدیو</th><th></th></tr>
+    {% for c in cameras %}
+    {% set h = health.get(c.id) %}
+    <tr>
+      <td class="ltr"><b>{{ c.id }}</b></td>
+      <td>{{ c.conveyor_id|fa }}</td>
+      <td>{{ 'چپ' if c.side == 'L' else 'راست' }}</td>
+      <td class="ltr muted" style="font-size:12px">{{ c.display_url }}</td>
+      <td>{% if h %}{{ {'connected':'وصل','connecting':'در حال اتصال','reconnecting':'اتصال مجدد','finished':'پایان ویدیو'}.get(h.state, h.state) }}{% elif c.enabled is defined and not c.enabled %}غیرفعال{% else %}—{% endif %}</td>
+      <td>
+        <form method="post" action="/cameras/{{ c.id }}/record" style="display:inline">
+          <input type="hidden" name="on" value="{{ '' if c.record else 'on' }}">
+          <button>{{ 'توقف ضبط' if c.record else 'شروع ضبط' }}</button>
+        </form>
+        {% if h and h.record_error %}<span class="muted">{{ h.record_error }}</span>{% endif %}
+      </td>
+      <td>
+        <a href="/cameras/{{ c.id }}/setup">تنظیم و بررسی تصویر</a> ·
+        <a href="/cameras/{{ c.id }}/edit">ویرایش</a> ·
+        <form method="post" action="/cameras/{{ c.id }}/delete" style="display:inline" onsubmit="return confirm('دوربین حذف شود؟')"><button>حذف</button></form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">دوربینی تعریف نشده است.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

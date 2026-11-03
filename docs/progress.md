@@ -15,7 +15,7 @@ A new session should read this file first, then `CLAUDE.md`.
 | 5 | Manual review UI | done |
 | 6 | Shift admin + reports | done |
 | 7 | Live capture | done (phase 2) |
-| 8 | Operator GUI | todo |
+| 8 | Operator GUI | done |
 | 9 | Field data + tuning loop | todo |
 | 10 | Windows packaging | todo |
 | 11 | Test suite hardening | todo |
@@ -260,6 +260,42 @@ cartons. Synthetic live run: 8/8 cartons, all L+R merged, 0 wrong credits;
 latency from carton centre on the line to stored event 1–4.7 s at 2× speed.
 The 2-hour / i5 acceptance run is part of Task 11's soak test.
 
+## Task 8 — Operator GUI
+
+Plan: extend the FastAPI/HTMX app into the operator console: dashboard with
+live MJPEG + overlays + counters + health, camera wizard (connect, snapshot,
+quality checks, ROI drawing, motion blur), test mode, replay; launcher that
+opens the browser; Playwright smoke test.
+
+Done:
+- `/` dashboard: MJPEG per camera (`/live/{id}.mjpg`, 4 fps, 960 px) with ROI,
+  counting line, carton edges (green = confirmed), last stamp + confidence;
+  HTMX panel every 2 s: open-shift counters per stamp/worker/conveyor, pending
+  count, camera health table, last cartons with latency. Nav badge shows
+  pending reviews on every page.
+- `/cameras` wizard: add/edit (Hikvision IP+user+password+channel 101/102, or
+  any RTSP URL / video file as a simulated camera), test connection →
+  snapshot + checks (sharpness, brightness, stamp letter height with Persian
+  pass/fail hints), ROI drawn with the mouse on the snapshot + belt direction,
+  motion-blur check from frames seen while moving, per-camera recording
+  toggle, delete. Saved to the YAML config; camera restarts with new settings.
+  Password is never sent back to the browser or logged.
+- `/test`: test stamp list + on/off; cartons recognised against the list
+  (`mode=test`), keyboard confirm/correct card (Enter on empty input = accept
+  the system's guess), live accuracy table (accuracy / rejection / error, per
+  stamp, unstamped).
+- `/replay`: upload or pick a video, conveyor/side/speed → runs as a replay
+  camera through the same live pipeline and dashboard (`mode=replay`).
+- `/health`, `/api/status`, `/api/events` (JSON for launcher, CI and tests).
+- `behsard.launcher` (`behsard-app`): data home, default config on first run,
+  rotating log `data/logs/behsard.log`, server + browser; reuses a running
+  instance. `behsard serve --open`.
+- Keyboard JS moved to `web/static/review.js` (shared by review and test).
+- Tests: `tests/e2e/test_smoke.py` (Playwright, Python): every page, add a
+  simulated camera, test connection, draw ROI with the mouse, open shift and
+  assign, live counts increase, resolve a review item by keyboard, Excel
+  download. `scripts/screenshots.py` regenerates `docs/screenshots/`.
+
 ## Decisions
 
 - **Timestamps** are naive local site time stored as ISO strings. Single site,
@@ -315,6 +351,14 @@ The 2-hour / i5 acceptance run is part of Task 11's soak test.
   DB, so the same review/label tools work, but production numbers stay clean.
 - Camera passwords are stored in the local config file (data folder on the
   site laptop, not the repo) and never logged (`redact`).
+- **Live view = MJPEG** (plain `<img>`, no JS client) at 4 fps / 960 px.
+- **Simulated camera = a video file path in the camera URL** (paced in real
+  time, looped); same code path as RTSP.
+- Unpaired sightings wait `pair_window_s` + 3 s (wall clock) for the other
+  camera before being stored alone, so a lagging camera under CPU load does
+  not split one carton into two events.
+- Browser tests use Python Playwright so the same test runs on the Windows CI
+  runner against the packaged app (`BEHSARD_URL`).
 - **Work day = shift start date**, so a night shift crossing midnight is
   reported on one day; cartons without a shift use their own date.
 - Reports count only credited cartons (recognized + resolved); pending ones

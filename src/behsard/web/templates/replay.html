@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}بازپخش ویدیو{% endblock %}
+{% block content %}
+{% if request.query_params.get('error') %}<div class="flash err">فایل ویدیو پیدا نشد.</div>{% endif %}
+<div class="card" style="max-width:820px">
+  <h2 style="margin-top:0">بازپخش ویدیوی ضبط‌شده</h2>
+  <p class="muted">ویدیو با همان پردازش زنده (ردیابی، تشخیص و نمایش روی داشبورد) اجرا می‌شود. کارتن‌ها با برچسب «بازپخش» ذخیره می‌شوند و در شمارش کارگران حساب نمی‌شوند (اگر حالت آزمایش روشن باشد، با مهرهای آزمایشی مقایسه می‌شوند).</p>
+  {% if running %}
+  <div class="flash ok">بازپخش در حال اجراست ({{ health.state if health else '' }}). <a href="/">مشاهده در داشبورد</a></div>
+  <form method="post" action="/replay/stop"><button>توقف بازپخش</button></form>
+  {% endif %}
+  <form method="post" action="/replay/start" enctype="multipart/form-data" style="display:grid; grid-template-columns: 180px 1fr; gap:10px 14px; align-items:center; margin-top:10px">
+    <label>بارگذاری فایل</label><input type="file" name="upload" accept="video/*">
+    <label>یا مسیر فایل روی این رایانه</label><input name="path" class="ltr" list="replay-files" placeholder="C:\videos\left.mp4">
+    <datalist id="replay-files">{% for f in files %}<option value="{{ f }}">{% endfor %}</datalist>
+    <label>نقاله</label><select name="conveyor_id">{% for c in conveyors %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>
+    <label>سمت</label><select name="side"><option value="L">چپ</option><option value="R">راست</option></select>
+    <label>سرعت پخش</label><select name="speed"><option value="1">۱×</option><option value="2">۲×</option><option value="4">۴×</option></select>
+    <span></span><button class="primary" id="start-replay">شروع بازپخش</button>
+  </form>
+</div>
+{% endblock %}

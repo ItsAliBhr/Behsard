@@ -1,0 +1,3 @@
+<p>{{ check.name }}: <b>{{ check.value|fa if check.value is not none else '—' }}</b>
+  {% if check.ok is none %}<span class="warn-dot"></span>{% elif check.ok %}<span class="ok-dot"></span> قبول{% else %}<span class="bad-dot"></span> رد{% endif %}
+  — {{ check.hint }}</p>

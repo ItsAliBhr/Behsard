@@ -37,6 +37,8 @@ from behsard.tracking.tracker import CartonSighting, TrackerParams
 
 log = logging.getLogger(__name__)
 
+HOLD_GRACE_S = 3.0  # extra wait for the other side's sighting
+
 
 def camera_url(cam: dict[str, Any]) -> str:
     """URL for a camera entry: explicit ``url`` (RTSP or video file) or host."""
@@ -261,7 +263,9 @@ class LiveService:
         with self._held_lock:
             for conveyor, held in self._held.items():
                 for h in list(held):
-                    if force or now - h.arrived > window + 0.5:
+                    # wait in wall-clock time for a partner camera that lags
+                    # behind under load; matching itself uses frame times
+                    if force or now - h.arrived > window + HOLD_GRACE_S:
                         held.remove(h)
                         s = h.sighting
                         item = (conveyor, s, None) if s.meta.get("side") != "R" else (conveyor, None, s)

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}دوربین{% endblock %}
+{% block content %}
+<div class="card" style="max-width:720px">
+  <h2 style="margin-top:0">{{ 'ویرایش دوربین' if cam else 'افزودن دوربین' }} <span class="muted" style="font-size:14px">گام ۱ از ۳</span></h2>
+  <form method="post" action="/cameras/save" style="display:grid; grid-template-columns: 180px 1fr; gap:10px 14px; align-items:center">
+    <label>شناسه دوربین</label>
+    <input name="id" class="ltr" required value="{{ cam.id if cam else '' }}" placeholder="cam1L" {{ 'readonly' if cam }}>
+    <label>نقاله</label>
+    <select name="conveyor_id">{% for c in conveyors %}<option value="{{ c.id }}" {{ 'selected' if cam and cam.conveyor_id == c.id }}>{{ c.name }}</option>{% endfor %}</select>
+    <label>سمت خط</label>
+    <select name="side"><option value="L" {{ 'selected' if cam and cam.side == 'L' }}>چپ</option><option value="R" {{ 'selected' if cam and cam.side == 'R' }}>راست</option></select>
+    <label>نوع منبع</label>
+    <select name="source" id="source" onchange="toggleSrc()">
+      <option value="hikvision" {{ 'selected' if not cam or not cam.url }}>دوربین هایک‌ویژن (IP)</option>
+      <option value="url" {{ 'selected' if cam and cam.url }}>آدرس RTSP دلخواه یا فایل ویدیو (شبیه‌ساز)</option>
+    </select>
+    <label class="hik">آدرس IP</label><input class="hik ltr" name="host" value="{{ cam.host if cam and cam.host else '' }}" placeholder="192.168.1.64">
+    <label class="hik">نام کاربری</label><input class="hik ltr" name="user" value="{{ cam.user if cam and cam.user else 'admin' }}">
+    <label class="hik">رمز عبور</label><input class="hik ltr" name="password" type="password" placeholder="{{ 'بدون تغییر' if cam and cam.has_password else '' }}" autocomplete="new-password">
+    <label class="hik">کانال</label>
+    <select class="hik" name="channel"><option value="101">اصلی 101 (کیفیت کامل)</option><option value="102" {{ 'selected' if cam and cam.channel == '102' }}>فرعی 102 (کم‌حجم)</option></select>
+    <label class="url">آدرس یا مسیر فایل</label><input class="url ltr" name="url" value="{{ cam.url if cam and cam.url else '' }}" placeholder="rtsp://... یا C:\videos\left.mp4">
+    <label>ضبط ویدیوی خام</label><input type="checkbox" name="record" {{ 'checked' if cam and cam.record }}>
+    <label>فعال</label><input type="checkbox" name="enabled" {{ 'checked' if not cam or cam.enabled is not defined or cam.enabled }}>
+    <span></span><button class="primary" id="save-camera">ذخیره و ادامه ←</button>
+  </form>
+  <p class="muted">رمز عبور فقط روی همین رایانه در فایل تنظیمات ذخیره می‌شود و در هیچ گزارشی نمایش داده نمی‌شود.</p>
+</div>
+<script>
+function toggleSrc(){const u=document.getElementById('source').value==='url';
+ document.querySelectorAll('.hik').forEach(e=>e.style.display=u?'none':'');
+ document.querySelectorAll('.url').forEach(e=>e.style.display=u?'':'none');}
+toggleSrc();
+</script>
+{% endblock %}

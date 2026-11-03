@@ -1,0 +1,45 @@
+<div class="grid2" style="margin-top:16px">
+  <div class="card">
+    <h3 style="margin-top:0">شمارش شیفت جاری
+      {% for s in shifts %}<span class="muted" style="font-size:14px"> · {{ s.name }} از {{ s.start_at|jdt|fa }}</span>{% endfor %}
+    </h3>
+    {% if test_mode.enabled %}<div class="flash err">حالت آزمایش روشن است: کارتن‌ها در شمارش کارگران حساب نمی‌شوند. <a href="/test">حالت آزمایش</a></div>{% endif %}
+    {% if not shifts %}<p class="muted">شیفت بازی وجود ندارد. <a href="/shifts">شروع شیفت</a></p>{% endif %}
+    <div style="display:flex; gap:40px; margin-bottom:10px">
+      <div>کل: <span class="big" id="total-count">{{ total|fa }}</span></div>
+      <div>در انتظار بررسی: <a href="/review" class="big" id="pending-count" style="color:var(--warn)">{{ pending|fa }}</a></div>
+    </div>
+    <table>
+      <tr><th>مهر</th><th>کارگر</th><th>نقاله</th><th>تعداد</th></tr>
+      {% for (code, worker, conv), n in rows %}
+      <tr><td><b class="ltr">{{ code }}</b></td><td>{{ worker }}</td><td>{{ conv }}</td><td class="num big">{{ n|fa }}</td></tr>
+      {% else %}<tr><td colspan="4" class="muted">هنوز کارتنی شمارش نشده است.</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">وضعیت دوربین‌ها</h3>
+    <table>
+      <tr><th>دوربین</th><th>وضعیت</th><th>فریم/ثانیه</th><th>آخرین فریم</th><th>قطع/وصل</th><th>کارتن</th></tr>
+      {% for cid, h in cameras.items() %}
+      <tr>
+        <td class="ltr">{{ cid }}</td>
+        <td>{{ {'connected':'وصل','connecting':'در حال اتصال','reconnecting':'اتصال مجدد','finished':'پایان ویدیو','stopped':'متوقف'}.get(h.state, h.state) }}{% if h.last_error %} <span class="muted">({{ h.last_error }})</span>{% endif %}</td>
+        <td class="num">{{ h.fps_out|fa }}</td>
+        <td class="num">{% if h.last_frame_age is not none %}{{ h.last_frame_age|fa }} ث{% else %}—{% endif %}</td>
+        <td class="num">{{ h.reconnects|fa }}</td>
+        <td class="num">{{ h.sightings|fa }}</td>
+      </tr>
+      {% else %}<tr><td colspan="6" class="muted">دوربینی فعال نیست.</td></tr>{% endfor %}
+    </table>
+    <h3>آخرین کارتن‌ها</h3>
+    <table>
+      <tr><th>شماره</th><th>مهر</th><th>اطمینان</th><th>وضعیت</th><th>تأخیر</th></tr>
+      {% for r in recent %}
+      <tr>
+        <td class="num">{{ r.event_id|fa }}</td><td><b class="ltr">{{ r.label }}</b>{% if r.mode != 'prod' %} <span class="muted">({{ 'آزمایش' if r.mode == 'test' else 'بازپخش' }})</span>{% endif %}</td>
+        <td class="num">{{ (r.confidence * 100)|round|int|fa }}٪</td><td>{{ r.status|status_fa }}</td><td class="num">{{ "%.1f"|format(r.latency_s)|fa }} ث</td>
+      </tr>
+      {% else %}<tr><td colspan="5" class="muted">—</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>

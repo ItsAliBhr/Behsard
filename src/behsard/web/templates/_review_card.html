@@ -1,15 +1,16 @@
 <div id="card">
 {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
 {% if message %}<div class="flash ok">{{ message }}</div>{% endif %}
+{% set base = base or "/review" %}
 {% if last %}
 <div class="flash ok">
   ثبت شد: کارتن شماره {{ last.id|fa }} ← <b class="ltr">{{ last.label }}</b>
-  <button hx-post="/review/{{ last.id }}/reopen" hx-target="#card" hx-swap="outerHTML">بازگردانی</button>
+  <button hx-post="{{ base }}/{{ last.id }}/reopen" hx-target="#card" hx-swap="outerHTML">بازگردانی</button>
 </div>
 {% endif %}
-<div class="pending">در انتظار بررسی: <b>{{ pending|fa }}</b> کارتن</div>
+<div class="pending">{{ pending_label or "در انتظار بررسی" }}: <b>{{ pending|fa }}</b> کارتن</div>
 {% if not ev %}
-  <div class="card"><h2>صف بررسی خالی است.</h2><p class="muted">همه کارتن‌ها تعیین تکلیف شده‌اند.</p></div>
+  <div class="card"><h2>صف بررسی خالی است.</h2><p class="muted">{{ empty_text or "همه کارتن‌ها تعیین تکلیف شده‌اند." }}</p></div>
 {% else %}
 <div class="review" style="margin-top:10px">
   <div class="card imgs">
@@ -31,7 +32,7 @@
     {% endif %}
   </div>
   <div class="card">
-    <form id="resolve-form" hx-post="/review/{{ ev.id }}/resolve" hx-target="#card" hx-swap="outerHTML">
+    <form id="resolve-form" data-guess="{{ ev.meta.best_guess or '' }}" hx-post="{{ base }}/{{ ev.id }}/resolve" hx-target="#card" hx-swap="outerHTML">
       <input type="hidden" name="decision" value="stamp">
       <input type="hidden" name="stamp" value="">
     </form>
@@ -52,11 +53,12 @@
     <div class="actions">
       <button type="button" onclick="behsardDecide('no_stamp')"><kbd>0</kbd> بدون مهر</button>
       <button type="button" onclick="behsardDecide('not_carton')"><kbd>.</kbd> کارتن نیست</button>
-      <button type="button" id="skip-link" hx-get="/review/card?after={{ ev.id }}" hx-target="#card" hx-swap="outerHTML"><kbd>Space</kbd> بعدی</button>
+      <button type="button" id="skip-link" hx-get="{{ base }}/card?after={{ ev.id }}" hx-target="#card" hx-swap="outerHTML"><kbd>Space</kbd> بعدی</button>
     </div>
     <div class="help muted">
       <kbd>1</kbd>…<kbd>9</kbd> انتخاب مهر ·
       تایپ کد (مثلاً <kbd>A12</kbd>) و <kbd>Enter</kbd> ·
+      <kbd>Enter</kbd> خالی = تأیید حدس سیستم ·
       <kbd>Backspace</kbd> اصلاح · <kbd>Esc</kbd> پاک کردن
     </div>
   </div>

@@ -1,0 +1,16 @@
+<div class="card">
+  <h3 style="margin-top:0">دقت در حالت آزمایش</h3>
+  <p>کارتن‌ها: {{ acc.events|fa }} · تأییدشده: {{ acc.confirmed|fa }} · منتظر تأیید: {{ acc.unconfirmed|fa }}</p>
+  <div style="display:flex; gap:30px">
+    <div>درست خودکار<br><span class="big" style="color:var(--ok)">{{ (acc.accuracy*100)|round(1)|fa }}٪</span></div>
+    <div>ارجاع به بررسی<br><span class="big">{{ (acc.rejection*100)|round(1)|fa }}٪</span></div>
+    <div>خطا<br><span class="big" style="color:var(--bad)">{{ (acc.error*100)|round(1)|fa }}٪</span></div>
+  </div>
+  <table style="margin-top:10px">
+    <tr><th>مهر</th><th>تعداد</th><th>درست</th><th>ارجاع</th><th>اشتباه</th></tr>
+    {% for code, r in acc.per_stamp %}
+    <tr><td class="ltr"><b>{{ code }}</b></td><td class="num">{{ r.n|fa }}</td><td class="num">{{ r.correct|fa }}</td><td class="num">{{ r.rejected|fa }}</td><td class="num">{{ r.wrong|fa }}</td></tr>
+    {% else %}<tr><td colspan="5" class="muted">هنوز کارتنی تأیید نشده است.</td></tr>{% endfor %}
+    <tr><td>بدون مهر</td><td colspan="4">درست رد شد: {{ acc.total.neg_ok|fa }} · به اشتباه پذیرفته شد: {{ acc.total.neg_fa|fa }}</td></tr>
+  </table>
+</div>

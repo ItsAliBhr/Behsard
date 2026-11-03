@@ -1,0 +1,17 @@
+{% if not ok %}
+<div class="flash err">اتصال برقرار نشد. آدرس IP، نام کاربری/رمز، کابل شبکه و روشن بودن دوربین را بررسی کنید.</div>
+{% else %}
+<div class="flash ok" id="conn-ok">اتصال برقرار است · وضوح تصویر: <span class="ltr">{{ resolution }}</span></div>
+<span id="new-snap" data-src="/media/snapshots/{{ cam.id }}.jpg?v={{ snap_v }}"></span>
+<table class="checks">
+  <tr><th>بررسی</th><th>مقدار</th><th>نتیجه</th><th>راهنما</th></tr>
+  {% for c in report.checks %}
+  <tr>
+    <td>{{ c.name }}</td>
+    <td class="num">{{ c.value|fa if c.value is not none else '—' }}</td>
+    <td>{% if c.ok is none %}<span class="warn-dot"></span> نامشخص{% elif c.ok %}<span class="ok-dot"></span> قبول{% else %}<span class="bad-dot"></span> رد{% endif %}</td>
+    <td>{{ c.hint }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}

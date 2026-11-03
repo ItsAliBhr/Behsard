@@ -1,0 +1,35 @@
+# Behsard configuration (created on first run; edited by the app).
+paths:
+  db: data/behsard.sqlite
+  media: data/media
+site:
+  timezone: Asia/Tehran
+conveyors:
+  - {id: 1, name: "نقاله ۱", coefficient: 1.0}
+  - {id: 2, name: "نقاله ۲", coefficient: 1.0}
+  - {id: 3, name: "نقاله ۳", coefficient: 1.0}
+  - {id: 4, name: "نقاله ۴", coefficient: 1.0}
+cameras: []
+recognition:
+  accept_threshold: 0.45
+  min_margin: 0.05
+  tesseract_cmd: tesseract
+  max_regions: 4
+  work_max_side: 1600
+tracking:
+  roi: [0.0, 0.0, 1.0, 1.0]
+  process_fps: 10
+  pair_window_s: 1.5
+  frames_per_sighting: 3
+live:
+  enabled: true
+  preview_width: 960
+  record_dir: data/recordings
+  segment_minutes: 5
+  min_free_gb: 5.0
+test_mode:
+  enabled: false
+  stamps: []
+review:
+  host: 127.0.0.1
+  port: 8000

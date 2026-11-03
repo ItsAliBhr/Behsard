@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}تنظیم دوربین {{ cam.id }}{% endblock %}
+{% block style %}
+  #roi-wrap { position:relative; display:inline-block; max-width:100%; user-select:none; }
+  #roi-wrap img { max-width:100%; display:block; }
+  #roi-canvas { position:absolute; inset:0; width:100%; height:100%; cursor:crosshair; }
+  .checks td:first-child { white-space:nowrap; }
+{% endblock %}
+{% block content %}
+{% if request.query_params.get('saved') %}<div class="flash ok">ناحیه دید ذخیره شد و دوربین با تنظیم جدید شروع به کار کرد.</div>{% endif %}
+<div class="card">
+  <h2 style="margin-top:0">تنظیم دوربین <span class="ltr">{{ cam.id }}</span> <span class="muted" style="font-size:14px">نقاله {{ cam.conveyor_id|fa }} · {{ 'چپ' if cam.side == 'L' else 'راست' }} · <span class="ltr">{{ cam.display_url }}</span></span></h2>
+  <p>گام ۲: <button class="primary" id="test-conn" hx-post="/cameras/{{ cam.id }}/test" hx-target="#test-result" hx-indicator="#spin">آزمایش اتصال و گرفتن عکس</button>
+     <span id="spin" class="htmx-indicator muted">در حال اتصال…</span></p>
+  <div id="test-result">{% if has_snapshot %}<p class="muted">آخرین عکس ذخیره‌شده در پایین نمایش داده شده است.</p>{% endif %}</div>
+</div>
+<div class="grid2">
+  <div class="card">
+    <h3 style="margin-top:0">گام ۳: ناحیه دید (محل عبور صفحه کارتن) را با ماوس رسم کنید</h3>
+    <div id="roi-wrap">
+      <img id="snap" src="{{ '/media/snapshots/' ~ cam.id ~ '.jpg?v=' ~ snap_v if has_snapshot else '' }}" alt="" {{ '' if has_snapshot else 'style=display:none' }}>
+      <canvas id="roi-canvas"></canvas>
+    </div>
+    {% if not has_snapshot %}<p class="muted" id="no-snap">ابتدا «آزمایش اتصال» را بزنید.</p>{% endif %}
+    <form method="post" action="/cameras/{{ cam.id }}/roi" id="roi-form" style="margin-top:10px">
+      <input type="hidden" name="x" value="{{ roi[0] }}"><input type="hidden" name="y" value="{{ roi[1] }}">
+      <input type="hidden" name="w" value="{{ roi[2] }}"><input type="hidden" name="h" value="{{ roi[3] }}">
+      جهت حرکت نوار:
+      <select name="direction">
+        <option value="auto">خودکار</option>
+        <option value="ltr" {{ 'selected' if cam.direction == 'ltr' }}>چپ به راست ←</option>
+        <option value="rtl" {{ 'selected' if cam.direction == 'rtl' }}>راست به چپ →</option>
+      </select>
+      <button class="primary" id="save-roi">ذخیره ناحیه دید</button>
+      <span class="muted" id="roi-text"></span>
+    </form>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">بررسی تاری در حرکت</h3>
+    <p class="muted">یک کارتن را با سرعت عادی از جلوی دوربین عبور دهید و سپس دکمه را بزنید.</p>
+    <button hx-get="/cameras/{{ cam.id }}/motion" hx-target="#motion">بررسی تاری حرکت</button>
+    <div id="motion"></div>
+    <h3>تصویر زنده</h3>
+    <img src="/live/{{ cam.id }}.mjpg" style="max-width:100%" alt="">
+  </div>
+</div>
+<script>
+(function(){
+  const img=document.getElementById('snap'), cv=document.getElementById('roi-canvas'), f=document.getElementById('roi-form');
+  let r=['x','y','w','h'].map(k=>parseFloat(f.elements[k].value)), start=null;
+  function draw(){
+    cv.width=cv.clientWidth; cv.height=cv.clientHeight; const c=cv.getContext('2d');
+    c.clearRect(0,0,cv.width,cv.height);
+    c.fillStyle='rgba(0,0,0,.35)'; c.fillRect(0,0,cv.width,cv.height);
+    c.clearRect(r[0]*cv.width,r[1]*cv.height,r[2]*cv.width,r[3]*cv.height);
+    c.strokeStyle='#00c8ff'; c.lineWidth=3; c.strokeRect(r[0]*cv.width,r[1]*cv.height,r[2]*cv.width,r[3]*cv.height);
+    c.strokeStyle='#ff3030'; c.beginPath(); const lx=(r[0]+r[2]/2)*cv.width; c.moveTo(lx,r[1]*cv.height); c.lineTo(lx,(r[1]+r[3])*cv.height); c.stroke();
+    ['x','y','w','h'].forEach((k,i)=>f.elements[k].value=r[i].toFixed(4));
+    document.getElementById('roi-text').textContent = r.map(v=>Math.round(v*100)+'%').join(' , ');
+  }
+  function pos(e){const b=cv.getBoundingClientRect();return [Math.min(Math.max((e.clientX-b.left)/b.width,0),1),Math.min(Math.max((e.clientY-b.top)/b.height,0),1)];}
+  cv.addEventListener('mousedown',e=>{start=pos(e);});
+  cv.addEventListener('mousemove',e=>{if(!start)return;const p=pos(e);r=[Math.min(start[0],p[0]),Math.min(start[1],p[1]),Math.abs(p[0]-start[0]),Math.abs(p[1]-start[1])];draw();});
+  window.addEventListener('mouseup',()=>{start=null;});
+  img.addEventListener('load',draw); window.addEventListener('resize',draw);
+  document.body.addEventListener('htmx:afterSwap',e=>{const s=document.getElementById('new-snap');
+    if(s){img.src=s.dataset.src; img.style.display=''; const n=document.getElementById('no-snap'); if(n) n.remove();}});
+  if(img.complete) draw();
+})();
+</script>
+{% endblock %}
