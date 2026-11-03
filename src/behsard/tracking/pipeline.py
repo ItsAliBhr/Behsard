@@ -124,22 +124,46 @@ class Pipeline:
         return result
 
     def process_carton(
-        self, conveyor_id: int, left: CartonSighting | None, right: CartonSighting | None
+        self,
+        conveyor_id: int,
+        left: CartonSighting | None,
+        right: CartonSighting | None,
+        mode: str = "prod",
+        test_stamps: dict[str, int] | None = None,
     ) -> CartonEvent:
+        """Recognise one carton and persist it immediately.
+
+        ``test_stamps`` (code -> stamp id) replaces the shift's active stamps
+        (test mode); such events are stored with ``mode`` "test" and never
+        reach worker counts or the production review queue.
+        """
         seen = [s for s in (left, right) if s is not None]
         ts = min(s.ts for s in seen)
-        images = [f for s in seen for f in s.frames]
-        full = [f for s in seen for f in (s.full_frames or s.frames)]
-        sources = [(s.camera_id, s.meta.get("side")) for s in seen for _ in s.frames]
-        active = self.shifts.active_stamps(conveyor_id, ts)
-        shift = self.shifts.shift_at(ts)
-        codes = [a.code for a in active]
+        # interleave the two sides (L0, R0, L1, R1, ...): the stamp is on one
+        # side only and the recognizer stops early once it is sure
+        order = [
+            (s, i)
+            for i in range(max(len(x.frames) for x in seen))
+            for s in seen
+            if i < len(s.frames)
+        ]
+        images = [s.frames[i] for s, i in order]
+        full = [(s.full_frames or s.frames)[i] for s, i in order]
+        sources = [(s.camera_id, s.meta.get("side")) for s, _ in order]
+        if test_stamps is not None:
+            ids = dict(test_stamps)
+            shift = None
+        else:
+            active = self.shifts.active_stamps(conveyor_id, ts)
+            ids = {a.code: a.stamp_id for a in active}
+            shift = self.shifts.shift_at(ts)
+        codes = sorted(ids)
         res = (
             self.recognizer.recognize(images, codes)
             if images and codes
             else Result(stamp=None, confidence=0.0)
         )
-        stamp_id = next((a.stamp_id for a in active if a.code == res.stamp), None)
+        stamp_id = ids.get(res.stamp) if res.stamp else None
         status = CartonStatus.RECOGNIZED if stamp_id is not None else CartonStatus.PENDING_REVIEW
         ev = CartonEvent(
             conveyor_id=conveyor_id,
@@ -157,7 +181,9 @@ class Pipeline:
                 "sides": [s.meta.get("side") for s in seen],
                 "n_frames": len(images),
                 "no_active_stamps": not codes,
+                "candidates": codes,
             },
+            mode=mode,
         )
         self.repo.add_carton_event(ev)
         assert ev.id is not None

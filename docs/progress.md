@@ -1,6 +1,7 @@
 # Progress
 
-Working through `docs/tasks.md` tasks 1–6 (task 7, live capture, skipped for now).
+Phase 1: `docs/tasks.md` tasks 1–6 done. Phase 2: `docs/tasks-phase2.md`
+tasks 7–12 (order of work: 7, 8, 10, then 11, 12, 9).
 A new session should read this file first, then `CLAUDE.md`.
 
 ## Status
@@ -13,7 +14,12 @@ A new session should read this file first, then `CLAUDE.md`.
 | 4 | Offline video pipeline | done (synthetic-validated; real handheld clips not trackable) |
 | 5 | Manual review UI | done |
 | 6 | Shift admin + reports | done |
-| 7 | Live capture | skipped (after camera tests) |
+| 7 | Live capture | done (phase 2) |
+| 8 | Operator GUI | todo |
+| 9 | Field data + tuning loop | todo |
+| 10 | Windows packaging | todo |
+| 11 | Test suite hardening | todo |
+| 12 | Field test protocol (fa) | todo |
 
 ## Environment notes
 
@@ -209,6 +215,51 @@ Done:
 4. Plastic crates with paper liner (out of v1 scope).
 5. Login/roles for the web UI if more than one supervisor uses it.
 
+## Task 7 — Live capture service (phase 2)
+
+Plan: reader thread per camera (OpenCV/FFmpeg, RTSP over TCP) with reconnect
+and health; worker thread per camera running the tracker; online L/R merge;
+single recognition thread persisting each carton immediately; optional
+ffmpeg stream-copy recording with a disk guard.
+
+Done (`src/behsard/live/`):
+- `reader.py` `CameraReader`: RTSP or video file (simulated camera / replay,
+  paced in real time, optional `speed` and `loop`); exponential backoff
+  0.5→4 s (a returning camera is picked up in ≤ ~5 s); throttles to
+  `process_fps` by grabbing and dropping extra frames; health (state, fps in/out,
+  last frame age, reconnects, resolution). `redact()` hides passwords.
+- `worker.py` `CameraWorker`: queue of 2 (newest wins, drops counted), runs
+  `CartonTracker`, keeps the latest frame + overlay state, renders the
+  annotated live JPEG (ROI, counting line, edges, last stamp + confidence).
+- `service.py` `LiveService`: starts cameras from config, pairs L/R sightings
+  online (held up to `pair_window_s` + 0.5 s, then released single), one
+  recognition thread → `Pipeline.process_carton` (DB row + media written at
+  once), recent-events ring buffer with latency, session counters, test mode
+  (`mode="test"` events vs a stamp list), replay cameras (`mode="replay"`).
+  `stop()` flushes held sightings and drains the recognition queue.
+- `recorder.py`: ffmpeg `-c copy` segment recording (5 min files), stops
+  when free disk < `live.min_free_gb`.
+- Tracker frame buffer now stores **JPEG-encoded** frames (≤48, full
+  resolution by default): raw 3200×1800 frames are 17 MB each.
+- `SqliteRepository` is now guarded by an `RLock` (web + live threads).
+- `carton_event.mode` column (prod/test/replay, auto-migrated): reports,
+  review queue and status counters only use `prod`.
+- Recognizer stops early once confident (≥0.8); pipeline interleaves L/R
+  frames so the stamped side is read first.
+- Config gains `live`, `test_mode`, more `tracking` keys, per-camera `url`
+  or `host/user/password/channel`, `roi`, `record`; `save_config()`;
+  relative paths resolve against the data home (folder above `config/`).
+- `runtime.py`: finds bundled `tools/tesseract` and `tools/ffmpeg` (Windows).
+- Tests: `tests/test_live.py` (reconnect, throttling, 2-camera end-to-end,
+  test mode isolation, disk guard, config round-trip).
+
+Measured here (4-core container, 2 simulated cameras 3200×1800 H.264 @10 fps,
+5 min): RSS plateaus at 1.1–1.2 GB after warm-up (no upward trend), CPU ≈ 35 %
+of the machine, 10 fps processed per camera, tracking ≈ 20 ms/frame, 53
+cartons. Synthetic live run: 8/8 cartons, all L+R merged, 0 wrong credits;
+latency from carton centre on the line to stored event 1–4.7 s at 2× speed.
+The 2-hour / i5 acceptance run is part of Task 11's soak test.
+
 ## Decisions
 
 - **Timestamps** are naive local site time stored as ISO strings. Single site,
@@ -253,6 +304,17 @@ Done:
 - No login in the pilot: the reviewer is recorded as "supervisor".
 - Async route handlers share the single SQLite connection on the event loop
   thread (single supervisor, small queries) — no extra locking needed.
+- **Live timestamps are wall-clock** at frame read time (also for simulated
+  and replayed files), so pairing and latency work the same everywhere.
+- **Buffered frames are JPEG (q92)**: memory bound with full-res crops kept.
+- **One recognition thread**: cartons arrive every 1.5–3 s per conveyor and
+  recognition stops early when confident; Tesseract runs single-threaded.
+- **Recording = ffmpeg stream copy** (no re-encode, negligible CPU); only for
+  RTSP cameras.
+- **Test-mode/replay events are stored with `mode`** instead of in a separate
+  DB, so the same review/label tools work, but production numbers stay clean.
+- Camera passwords are stored in the local config file (data folder on the
+  site laptop, not the repo) and never logged (`redact`).
 - **Work day = shift start date**, so a night shift crossing midnight is
   reported on one day; cartons without a shift use their own date.
 - Reports count only credited cartons (recognized + resolved); pending ones

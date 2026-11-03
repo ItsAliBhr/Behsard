@@ -49,6 +49,9 @@ class TrackerParams:
     min_shift: float = 0.4  # px; below this the conveyor counts as stopped
     frames_per_sighting: int = 3
     buffer_step: float = 2.0  # keep at most one frame per this many px of travel
+    max_buffer: int = 48  # hard cap on buffered frames (memory bound)
+    store_max_side: int = 0  # downscale buffered frames to this long side (0 = full res)
+    jpeg_quality: int = 92
 
 
 @dataclass
@@ -83,8 +86,14 @@ class _EdgeTrack:
 class _Buffered:
     offset: float
     t: datetime
-    frame: np.ndarray  # full-resolution ROI-independent frame
+    jpg: bytes  # JPEG-encoded frame (full resolution unless store_max_side)
     sharp: float
+
+    @property
+    def frame(self) -> np.ndarray:
+        img = cv2.imdecode(np.frombuffer(self.jpg, np.uint8), cv2.IMREAD_COLOR)
+        assert img is not None
+        return img
 
 
 def column_edges(gray: np.ndarray, k: float, rel: float = 0.3) -> np.ndarray:
@@ -159,6 +168,21 @@ class CartonTracker:
         self.t_index += 1
         return self._emit(ts)
 
+    def overlay(self) -> dict[str, object]:
+        """Current tracking state for the live view (fractions of the ROI)."""
+        w = float(self.width or 1)
+        return {
+            "roi": self.p.roi,
+            "line_x": self.p.line_x,
+            "edges": [
+                (t.last_x / w, t.confirmed)
+                for t in self.tracks
+                if t.last_t >= self.t_index - 1
+            ],
+            "moving": abs(self.last_shift) > 0,
+            "shift_px": round(self.last_shift, 1),
+        }
+
     def _shift(self, prev: np.ndarray, cur: np.ndarray) -> float:
         """Horizontal conveyor shift between two work frames (px).
 
@@ -185,16 +209,34 @@ class CartonTracker:
             return float(sx)
         return 0.0
 
+    def _encode(self, frame: np.ndarray) -> bytes:
+        m = self.p.store_max_side
+        if m and max(frame.shape[:2]) > m:
+            s = m / max(frame.shape[:2])
+            frame = cv2.resize(frame, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, self.p.jpeg_quality])
+        assert ok
+        return buf.tobytes()
+
     def _buffer_frame(self, frame: np.ndarray, g: np.ndarray, ts: datetime) -> None:
+        """Keep candidate frames, JPEG-encoded and bounded in number.
+
+        Raw 3200x1800 frames are 17 MB each; encoded they are ~1 MB, and we
+        encode only frames that are actually kept.
+        """
         sh = sharpness(g) / (1.0 + abs(self.last_shift))  # penalise motion blur
-        if self.buffer and abs(self.buffer[-1].offset - self.offset) < self.p.buffer_step:
+        step = max(self.p.buffer_step, self.width / 40.0)
+        if self.buffer and abs(self.buffer[-1].offset - self.offset) < step:
             if sh > self.buffer[-1].sharp:
-                self.buffer[-1] = _Buffered(self.offset, ts, frame.copy(), sh)
+                self.buffer[-1] = _Buffered(self.offset, ts, self._encode(frame), sh)
             return
-        self.buffer.append(_Buffered(self.offset, ts, frame.copy(), sh))
-        # keep about two frame widths of travel
-        limit = 2.5 * self.p.max_carton_frac * self.width
-        while self.buffer and abs(self.offset - self.buffer[0].offset) > limit:
+        self.buffer.append(_Buffered(self.offset, ts, self._encode(frame), sh))
+        # a carton is complete at most ~one carton width after its centre
+        # passed the line, so ~2 view widths of travel is plenty
+        limit = 2.0 * self.p.max_carton_frac * self.width
+        while self.buffer and (
+            abs(self.offset - self.buffer[0].offset) > limit or len(self.buffer) > self.p.max_buffer
+        ):
             self.buffer.popleft()
 
     def _update_edges(self, g: np.ndarray, ts: datetime) -> None:
@@ -305,14 +347,18 @@ class CartonTracker:
             if dist <= 0.35:
                 cands.append((dist, -b.sharp, b))
         cands.sort(key=lambda c: (round(c[0] * 4), c[1]))  # centred first, then sharp
-        chosen = [c[2] for c in cands[: self.p.frames_per_sighting]]
+        chosen_b = [c[2] for c in cands[: self.p.frames_per_sighting]]
+        decoded = [b.frame for b in chosen_b]
+        chosen = chosen_b
         self.count += 1
         return CartonSighting(
             camera_id=self.camera_id,
             ts=self._centre_time(uc, t1, t2),
-            frames=[self._carton_crop(b.frame, ua + b.offset, ua + w + b.offset) for b in chosen],
+            frames=[
+                self._carton_crop(f, ua + b.offset, ua + w + b.offset) for f, b in zip(decoded, chosen)
+            ],
             frame_times=[b.t for b in chosen],
-            full_frames=[b.frame for b in chosen],
+            full_frames=decoded,
             width_px=w,
             index=self.count,
             meta={"t_first_edge": t1.isoformat(), "t_second_edge": t2.isoformat()},

@@ -124,8 +124,10 @@ class StampRecognizer:
         use_tesseract: bool = True,
         use_glyphs: bool = True,
         weights: tuple[float, float, float] = (1.0, 1.0, 1.0),
+        early_accept: float = 0.8,
     ) -> None:
         self.cfg = cfg or RecognitionConfig()
+        self.early_accept = early_accept
         self.ink = ink or InkParams()
         self.tesseract_top_k = tesseract_top_k
         self.use_tesseract = use_tesseract
@@ -139,16 +141,28 @@ class StampRecognizer:
         # weights of (tesseract, per-glyph, whole-code) evidence
         self.weights = (wt / total, wg / total, ww / total)
         self.glyphs = GlyphScorer()
-        cmd = shutil.which(self.cfg.tesseract_cmd) or self.cfg.tesseract_cmd
+        from behsard.runtime import configure_tesseract
+
+        bundled = configure_tesseract() if self.cfg.tesseract_cmd == "tesseract" else None
+        cmd = bundled or shutil.which(self.cfg.tesseract_cmd) or self.cfg.tesseract_cmd
         pytesseract.pytesseract.tesseract_cmd = cmd
 
     # ---- public --------------------------------------------------------
     def recognize(self, images: Sequence[np.ndarray], active_stamps: Sequence[str]) -> Result:
+        """Read images in order; stop early once the answer is confident.
+
+        Callers should interleave views (left, right, left, ...) so the side
+        carrying the stamp is reached early.
+        """
         active = [s.strip().upper() for s in active_stamps]
         readings: list[Reading] = []
+        result = Result(stamp=None, confidence=0.0)
         for i, img in enumerate(images):
             readings.extend(self.read_image(img, i))
-        return self.decide(readings, active)
+            result = self.decide(readings, active)
+            if result.stamp is not None and result.confidence >= self.early_accept and i + 1 < len(images):
+                break
+        return result
 
     # ---- steps ---------------------------------------------------------
     def read_image(self, img: np.ndarray, image_index: int = 0) -> list[Reading]:

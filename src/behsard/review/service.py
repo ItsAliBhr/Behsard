@@ -34,7 +34,7 @@ class ReviewService:
 
     # ---- queue ---------------------------------------------------------
     def queue(self, limit: int = 50, conveyor_id: int | None = None) -> list[CartonEvent]:
-        events = self.repo.list_carton_events(CartonStatus.PENDING_REVIEW, limit=10_000)
+        events = self.repo.list_carton_events(CartonStatus.PENDING_REVIEW, limit=10_000, mode="prod")
         if conveyor_id is not None:
             events = [e for e in events if e.conveyor_id == conveyor_id]
         return events[:limit]

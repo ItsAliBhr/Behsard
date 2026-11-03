@@ -99,6 +99,7 @@ class CartonEvent:
     frame_path: str | None = None  # best full frame
     crop_path: str | None = None  # best stamp crop
     meta: dict[str, object] = field(default_factory=dict)  # tracking info
+    mode: str = "prod"  # prod | test (test mode) | replay (recorded video)
     id: int | None = None
 
 

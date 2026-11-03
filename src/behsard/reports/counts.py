@@ -87,7 +87,7 @@ def build_report(repo: Repository, start: date, end: date) -> Report:
         rows.append(r)
     pending = 0
     statuses: dict[str, int] = defaultdict(int)
-    for ev in repo.list_carton_events(limit=1_000_000):
+    for ev in repo.list_carton_events(limit=1_000_000, mode="prod"):
         if q0 - timedelta(days=1) <= ev.ts < q1:
             shift = repo.get_shift(ev.shift_id) if ev.shift_id else None
             day = shift.start_at.date() if shift else ev.ts.date()

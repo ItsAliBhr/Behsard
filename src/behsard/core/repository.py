@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from datetime import date, datetime, timedelta
 from importlib import resources
 from pathlib import Path
@@ -71,12 +72,14 @@ class Repository(Protocol):
         status: CartonStatus | None = None,
         shift_id: int | None = None,
         limit: int = 1000,
+        mode: str | None = None,
+        after_id: int | None = None,
     ) -> list[CartonEvent]: ...
     def add_recognition_result(self, r: RecognitionResult) -> RecognitionResult: ...
     def list_recognition_results(self, event_id: int) -> list[RecognitionResult]: ...
     def add_manual_review(self, r: ManualReview) -> ManualReview: ...
     def list_manual_reviews(self) -> list[ManualReview]: ...
-    def count_by_status(self) -> dict[str, int]: ...
+    def count_by_status(self, mode: str = "prod") -> dict[str, int]: ...
     def counted_rows(self, start: datetime, end: datetime) -> list[dict[str, Any]]: ...
     def close(self) -> None: ...
 
@@ -89,6 +92,9 @@ class SqliteRepository:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         # check_same_thread=False: FastAPI may call from a worker thread;
         # we serialise access per request ourselves (single supervisor UI).
+        # One connection shared by the web UI and the live capture threads;
+        # every statement runs under this lock.
+        self.lock = threading.RLock()
         self.conn = sqlite3.connect(str(path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
@@ -96,24 +102,35 @@ class SqliteRepository:
             self.conn.execute("PRAGMA journal_mode = WAL")
         schema = resources.files("behsard.core").joinpath("schema.sql").read_text()
         self.conn.executescript(schema)
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self) -> None:
+        """Small additive migrations for databases created by older versions."""
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(carton_event)")}
+        if "mode" not in cols:
+            self.conn.execute("ALTER TABLE carton_event ADD COLUMN mode TEXT NOT NULL DEFAULT 'prod'")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS ix_carton_event_mode ON carton_event(mode)")
 
     def close(self) -> None:
         self.conn.close()
 
     # ---- helpers -------------------------------------------------------
     def _insert(self, sql: str, params: Iterable[Any]) -> int:
-        cur = self.conn.execute(sql, tuple(params))
-        self.conn.commit()
-        assert cur.lastrowid is not None
-        return cur.lastrowid
+        with self.lock:
+            cur = self.conn.execute(sql, tuple(params))
+            self.conn.commit()
+            assert cur.lastrowid is not None
+            return cur.lastrowid
 
     def _exec(self, sql: str, params: Iterable[Any] = ()) -> None:
-        self.conn.execute(sql, tuple(params))
-        self.conn.commit()
+        with self.lock:
+            self.conn.execute(sql, tuple(params))
+            self.conn.commit()
 
     def _rows(self, sql: str, params: Iterable[Any] = ()) -> list[sqlite3.Row]:
-        return list(self.conn.execute(sql, tuple(params)).fetchall())
+        with self.lock:
+            return list(self.conn.execute(sql, tuple(params)).fetchall())
 
     # ---- workers -------------------------------------------------------
     @staticmethod
@@ -284,13 +301,14 @@ class SqliteRepository:
             frame_path=r["frame_path"],
             crop_path=r["crop_path"],
             meta=json.loads(r["meta"] or "{}"),
+            mode=r["mode"],
             id=r["id"],
         )
 
     def add_carton_event(self, ev: CartonEvent) -> CartonEvent:
         ev.id = self._insert(
             "INSERT INTO carton_event (conveyor_id, shift_id, ts, status, stamp_id, "
-            "confidence, frame_path, crop_path, meta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "confidence, frame_path, crop_path, meta, mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 ev.conveyor_id,
                 ev.shift_id,
@@ -301,6 +319,7 @@ class SqliteRepository:
                 ev.frame_path,
                 ev.crop_path,
                 json.dumps(ev.meta, ensure_ascii=False),
+                ev.mode,
             ),
         )
         return ev
@@ -308,7 +327,7 @@ class SqliteRepository:
     def update_carton_event(self, ev: CartonEvent) -> None:
         self._exec(
             "UPDATE carton_event SET conveyor_id = ?, shift_id = ?, ts = ?, status = ?, "
-            "stamp_id = ?, confidence = ?, frame_path = ?, crop_path = ?, meta = ? "
+            "stamp_id = ?, confidence = ?, frame_path = ?, crop_path = ?, meta = ?, mode = ? "
             "WHERE id = ?",
             (
                 ev.conveyor_id,
@@ -320,6 +339,7 @@ class SqliteRepository:
                 ev.frame_path,
                 ev.crop_path,
                 json.dumps(ev.meta, ensure_ascii=False),
+                ev.mode,
                 ev.id,
             ),
         )
@@ -333,9 +353,17 @@ class SqliteRepository:
         status: CartonStatus | None = None,
         shift_id: int | None = None,
         limit: int = 1000,
+        mode: str | None = None,
+        after_id: int | None = None,
     ) -> list[CartonEvent]:
         sql = "SELECT * FROM carton_event WHERE 1 = 1"
         params: list[Any] = []
+        if mode is not None:
+            sql += " AND mode = ?"
+            params.append(mode)
+        if after_id is not None:
+            sql += " AND id > ?"
+            params.append(after_id)
         if status is not None:
             sql += " AND status = ?"
             params.append(str(status))
@@ -346,8 +374,10 @@ class SqliteRepository:
         params.append(limit)
         return [self._event(r) for r in self._rows(sql, params)]
 
-    def count_by_status(self) -> dict[str, int]:
-        rows = self._rows("SELECT status, COUNT(*) AS n FROM carton_event GROUP BY status")
+    def count_by_status(self, mode: str = "prod") -> dict[str, int]:
+        rows = self._rows(
+            "SELECT status, COUNT(*) AS n FROM carton_event WHERE mode = ? GROUP BY status", (mode,)
+        )
         return {r["status"]: r["n"] for r in rows}
 
     def add_recognition_result(self, r: RecognitionResult) -> RecognitionResult:
@@ -432,7 +462,7 @@ class SqliteRepository:
             LEFT JOIN shift_assignment a
                    ON a.shift_id = e.shift_id AND a.stamp_id = e.stamp_id
             LEFT JOIN worker w ON w.id = a.worker_id
-            WHERE e.status IN (?, ?) AND e.ts >= ? AND e.ts < ?
+            WHERE e.status IN (?, ?) AND e.ts >= ? AND e.ts < ? AND e.mode = 'prod'
             ORDER BY e.ts
             """,
             (
