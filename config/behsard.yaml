@@ -1,0 +1,42 @@
+# Behsard configuration (single YAML file for the whole system).
+# No secrets here: camera credentials come from environment variables
+# (BEHSARD_CAM_USER / BEHSARD_CAM_PASS) at runtime.
+
+paths:
+  db: data/behsard.sqlite        # SQLite database (pilot)
+  media: data/media              # saved frames and stamp crops
+
+site:
+  timezone: Asia/Tehran
+
+conveyors:
+  - {id: 1, name: "نقاله ۱", coefficient: 1.00}
+  - {id: 2, name: "نقاله ۲", coefficient: 1.00}
+  - {id: 3, name: "نقاله ۳", coefficient: 1.00}
+  - {id: 4, name: "نقاله ۴", coefficient: 1.00}
+
+cameras:
+  - {id: cam1L, conveyor_id: 1, side: L, host: 192.168.1.101}
+  - {id: cam1R, conveyor_id: 1, side: R, host: 192.168.1.102}
+
+recognition:
+  # Accept threshold: below this confidence the carton goes to manual review.
+  accept_threshold: 0.60
+  # Minimum margin between best and second-best stamp score.
+  min_margin: 0.08
+  tesseract_cmd: tesseract
+  max_regions: 4
+  # Recognize on a downscaled copy whose long side is at most this many px.
+  work_max_side: 1600
+
+tracking:
+  # Region of interest (fractions of the frame) where the carton face is seen.
+  roi: [0.0, 0.0, 1.0, 1.0]
+  process_fps: 5
+  # Max seconds between the L and R sightings of the same carton.
+  pair_window_s: 1.5
+  frames_per_sighting: 3
+
+review:
+  host: 127.0.0.1
+  port: 8000
