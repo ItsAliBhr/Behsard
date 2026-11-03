@@ -427,7 +427,12 @@ CI (GitHub Actions, branch `claude/brave-galileo-0f4ujf`):
 - `windows-build`: PyInstaller zip built; on a **clean Windows runner** the
   packaged `Behsard.exe` starts, creates config/data, `/health` OK, Playwright
   smoke test passes against it, replay check 8/8 cartons, 0 wrong credits.
-- Release: tag `v0.2.0` publishes `Behsard-windows-x64-v0.2.0.zip`.
+- Release **v0.2.0 published**: https://github.com/ItsAliBhr/Behsard/releases/tag/v0.2.0
+  (`Behsard-windows-x64-v0.2.0.zip`, 171 MB, commit bfec384). The session's git
+  proxy cannot push tags, so the tag was created by the workflow: Actions →
+  windows-build → Run workflow with `release_tag` (e.g. `v0.2.1`) builds,
+  runs the clean-runner acceptance, then tags that commit and publishes.
+  Pushing a `v*` tag from a normal git client works too.
 
 Final numbers:
 | Check | Result |
