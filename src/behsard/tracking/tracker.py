@@ -266,7 +266,9 @@ class CartonTracker:
             # coordinate every few frames (aliasing), never frame to frame.
             if (
                 self.t_index - tr.last_t == 1
-                and abs(step_belt) >= 1.5
+                # small belt steps (slowing down / starting) cannot tell a
+                # moving edge from a static one within the tolerance
+                and abs(step_belt) >= 3.0
                 and abs(step_img - step_belt) <= max(2.0, 0.3 * abs(step_belt))
             ):
                 tr.good_steps += 1
@@ -283,7 +285,12 @@ class CartonTracker:
                 and abs(moved) >= self.p.confirm_motion
             ):
                 tr.confirmed = True
-            if tr.confirmed and not tr.crossed and (prev_x - line) * (tr.last_x - line) <= 0 and prev_x != tr.last_x:
+            crossed_now = (prev_x - line) * (tr.last_x - line) <= 0 and prev_x != tr.last_x
+            # an edge confirmed only after it passed the line (e.g. the first
+            # carton entering while motion was still being picked up) counts
+            # at the moment it is confirmed
+            crossed_before = (tr.first_x - line) * (tr.last_x - line) < 0
+            if tr.confirmed and not tr.crossed and (crossed_now or crossed_before):
                 tr.crossed = True
                 self.boundaries.append((tr.u, ts, self.offset))
                 self.stats["boundaries"] += 1

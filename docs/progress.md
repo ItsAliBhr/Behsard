@@ -399,6 +399,25 @@ so neighbouring seconds of one carton can fall in both halves; real gains
 must be measured on field data with many stamps (exactly what the export +
 rebuild loop is for). The learned file is **not** shipped by default.
 
+## CI fixes found on GitHub runners (after tasks 7–12)
+
+- **Python 3.12 bug:** `CameraReader`/`CameraWorker` (Thread subclasses) kept
+  their stop flag in `self._stop`, which shadows `Thread._stop()` on Python
+  < 3.13 → every camera thread crashed. Renamed `_stop_event`. (Dev box runs
+  3.13, Windows build used 3.12.) CI and the Windows build now use 3.13.
+- **Windows acceptance:** the runner ends processes started by a step when
+  the step finishes → app start, smoke test and replay check in one step.
+- **Tracker robustness** (found because the runner's font set produced
+  different synthetic videos): (1) an edge confirmed only after it passed the
+  counting line now counts (first carton entering while motion was being
+  picked up was missed); (2) "moves with the belt" steps need ≥ 3 px belt
+  travel, so static background edges cannot qualify while the belt slows
+  down (gave a spurious carton after the last one). Now exact on 10 synthetic
+  camera streams (5 video pairs × 3 font sets): every carton, no extras,
+  times within 0.1 s.
+- Tests pinned to ubuntu-24.04 (Tesseract 5.3.4, the version the regression
+  thresholds were measured with; ubuntu-latest ships 5.5).
+
 ## Decisions
 
 - **Timestamps** are naive local site time stored as ISO strings. Single site,
