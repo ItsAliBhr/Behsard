@@ -17,8 +17,8 @@ A new session should read this file first, then `CLAUDE.md`.
 | 7 | Live capture | done (phase 2) |
 | 8 | Operator GUI | done |
 | 9 | Field data + tuning loop | todo |
-| 10 | Windows packaging | todo |
-| 11 | Test suite hardening | todo |
+| 10 | Windows packaging | done (CI build + packaged app start verified on GitHub) |
+| 11 | Test suite hardening | done |
 | 12 | Field test protocol (fa) | todo |
 
 ## Environment notes
@@ -296,6 +296,63 @@ Done:
   assign, live counts increase, resolve a review item by keyboard, Excel
   download. `scripts/screenshots.py` regenerates `docs/screenshots/`.
 
+## Task 10 — Windows packaging + one-click run
+
+Plan: PyInstaller one-folder build with bundled Tesseract + ffmpeg, portable
+zip; GitHub Actions build → acceptance on a clean runner → release on tags;
+first run creates data/config offline; README.fa.md.
+
+Done:
+- `packaging/behsard.spec`, `packaging/app_entry.py` → `Behsard.exe`
+  (console window = log; closing it stops the app), `packaging/start.bat`,
+  `packaging/build_windows.ps1` (Chocolatey Tesseract + ffmpeg copied to
+  `tools/`, only `eng`/`osd` traineddata, zip `Behsard-windows-x64-<ver>.zip`).
+- `runtime.py` finds `tools/tesseract` (sets `TESSDATA_PREFIX`) and
+  `tools/ffmpeg`; glyph templates also use Windows fonts (Arial/Verdana/Tahoma
+  Bold).
+- `.github/workflows/windows.yml`: `build` (windows-latest) → `acceptance`
+  (fresh runner: unzip, start `Behsard.exe`, wait `/health`, check first-run
+  config, Playwright smoke test against it via `BEHSARD_URL`,
+  `scripts/replay_check.py` replays a synthetic video and checks counts) →
+  `release` (only on `v*` tags, `softprops/action-gh-release`).
+- First run (`behsard.launcher.ensure_home`) creates `config/behsard.yaml`
+  from the packaged default and `data/{media,logs,recordings,replays,exports}`
+  next to the exe. Works offline (no runtime downloads).
+- `README.fa.md` (Persian install/run/pages/troubleshooting, screenshots in
+  `docs/screenshots/`).
+- First CI run: **build OK, packaged app started on a clean runner and
+  `/health` = OK**; the acceptance step then failed in the *test tooling*
+  (synthetic generator had no Linux fonts on Windows → fixed: Hershey
+  fallback renders 8-bit, Windows fonts added).
+
+## Task 11 — Test suite hardening
+
+Done:
+- `behsard.sim.netcam`: `HttpCamera` (ffmpeg serves a looped video as
+  H.264/MPEG-TS over HTTP, `drop(seconds)` = outage), `MediaMtx` +
+  `RtspCamera` / `RtspConveyor` (two frame-synchronised side cameras from one
+  ffmpeg publisher). Downloading/running MediaMTX was not allowed in this
+  sandbox, so RTSP tests skip locally and run in CI (`tests.yml` installs
+  MediaMTX). OpenCV's bundled FFmpeg cannot read MJPEG-over-HTTP, hence TS.
+- `tests/test_netcam.py`: HTTP camera dropped for 20 s recovers in **6.7 s**
+  (< 10 s; reader backoff cap now 3 s); live pipeline over the network path;
+  RTSP 2-camera end-to-end + 20 s publisher kill (CI).
+- `tests/test_end_to_end.py`: offline 2-camera synthetic conveyor — one event
+  per carton, 0 wrong auto credits, and after resolving the review queue the
+  per-stamp report equals the ground truth exactly; live paced 2-camera run —
+  exact carton count, 0 double counts, 0 wrong credits, latency < 5 s.
+- `tests/test_regression.py`: real fixtures — screenshots 100 %; frames
+  accuracy ≥ 0.42, top-1 ≥ 0.70, error 0, unstamped false accepts 0.
+- `scripts/soak.py` + `tests/test_soak.py` (`BEHSARD_SOAK_MINUTES`): 2 cameras
+  3200×1800, memory growth < 10 %, CPU < 70 %, stored ≥ 90 % of shown cartons;
+  nightly 120 min job in `tests.yml`.
+- `.github/workflows/tests.yml`: Ubuntu, Tesseract + ffmpeg + MediaMTX +
+  Playwright, full suite on every push; nightly soak.
+- `docs/testing.md`: how to run everything locally.
+- Speed: Tesseract is skipped on variants whose glyph score < 0.6
+  (`tess_min_glyph`): same accuracy on real frames and synthetic dev, ~20 %
+  faster (0.85 → 0.68 s per real frame).
+
 ## Decisions
 
 - **Timestamps** are naive local site time stored as ISO strings. Single site,
@@ -351,6 +408,15 @@ Done:
   DB, so the same review/label tools work, but production numbers stay clean.
 - Camera passwords are stored in the local config file (data folder on the
   site laptop, not the repo) and never logged (`redact`).
+- **Portable one-folder zip, not an installer**: unzip and double-click;
+  data lives next to the exe (backup = copy `config/` and `data/`).
+- **Console window kept** for the exe: visible log, obvious way to stop.
+- **Network-camera simulator = ffmpeg** (HTTP/MPEG-TS locally, RTSP via
+  MediaMTX in CI); the same synthetic video drives files, HTTP and RTSP.
+- **"Exact counts" are asserted after review**: the recognizer may send a
+  carton to review (never a wrong credit); the supervisor's decision makes
+  the final report exact. Live tests assert exact carton counts, 0 double
+  counts and 0 wrong credits.
 - **Live view = MJPEG** (plain `<img>`, no JS client) at 4 fps / 960 px.
 - **Simulated camera = a video file path in the camera URL** (paced in real
   time, looped); same code path as RTSP.

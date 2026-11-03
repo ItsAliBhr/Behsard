@@ -94,7 +94,7 @@ class CameraReader(threading.Thread):
         process_fps: float = 10.0,
         loop: bool = True,
         realtime: bool = True,
-        backoff_max: float = 4.0,
+        backoff_max: float = 3.0,
         speed: float = 1.0,
     ) -> None:
         super().__init__(name=f"reader-{camera_id}", daemon=True)

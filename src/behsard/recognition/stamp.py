@@ -125,9 +125,13 @@ class StampRecognizer:
         use_glyphs: bool = True,
         weights: tuple[float, float, float] = (1.0, 1.0, 1.0),
         early_accept: float = 0.8,
+        tess_min_glyph: float = 0.6,
     ) -> None:
         self.cfg = cfg or RecognitionConfig()
         self.early_accept = early_accept
+        # skip Tesseract on variants where the glyph reader sees nothing
+        # stamp-like (saves ~150 ms per call on unstamped cartons)
+        self.tess_min_glyph = tess_min_glyph
         self.ink = ink or InkParams()
         self.tesseract_top_k = tesseract_top_k
         self.use_tesseract = use_tesseract
@@ -187,6 +191,8 @@ class StampRecognizer:
                 readings, key=lambda r: (r.glyph_best, r.region_score), reverse=True
             )
             for r in order[: self.tesseract_top_k] if self.use_glyphs else order:
+                if self.use_glyphs and r.glyph_best < self.tess_min_glyph:
+                    continue
                 r.text, r.ocr_conf = self._ocr_line(r.line)
         return readings
 

@@ -31,6 +31,10 @@ _FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
     "/usr/share/fonts/truetype/crosextra/Carlito-Bold.ttf",
     "/usr/share/fonts/opentype/inter/Inter-Bold.otf",
+    "C:/Windows/Fonts/arialbd.ttf",
+    "C:/Windows/Fonts/verdanab.ttf",
+    "C:/Windows/Fonts/tahomabd.ttf",
+    "C:/Windows/Fonts/segoeuib.ttf",
 )
 
 
@@ -206,8 +210,9 @@ def render_stamp_mask(
         scale = text_h / 22.0
         thick = max(2, int(scale * 2.2))
         (tw, th), _ = cv2.getTextSize(code, cv2.FONT_HERSHEY_DUPLEX, scale, thick)
-        mask = np.zeros((th + 2 * pad, tw + 2 * pad), np.float32)
-        cv2.putText(mask, code, (pad, pad + th), cv2.FONT_HERSHEY_DUPLEX, scale, 1.0, thick, cv2.LINE_AA)
+        m8 = np.zeros((th + 2 * pad, tw + 2 * pad), np.uint8)  # putText needs 8-bit
+        cv2.putText(m8, code, (pad, pad + th), cv2.FONT_HERSHEY_DUPLEX, scale, 255, thick, cv2.LINE_AA)
+        mask = m8.astype(np.float32) / 255.0
     if rng.random() < 0.15:  # rectangular stamp frame
         ys, xs = np.nonzero(mask > 0.5)
         m = int(text_h * 0.25)
