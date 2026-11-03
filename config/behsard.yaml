@@ -21,9 +21,9 @@ cameras:
 
 recognition:
   # Accept threshold: below this confidence the carton goes to manual review.
-  accept_threshold: 0.60
+  accept_threshold: 0.45
   # Minimum margin between best and second-best stamp score.
-  min_margin: 0.08
+  min_margin: 0.05
   tesseract_cmd: tesseract
   max_regions: 4
   # Recognize on a downscaled copy whose long side is at most this many px.

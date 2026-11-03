@@ -14,8 +14,8 @@ DEFAULT_CONFIG_PATH = Path("config/behsard.yaml")
 
 @dataclass
 class RecognitionConfig:
-    accept_threshold: float = 0.60
-    min_margin: float = 0.08
+    accept_threshold: float = 0.45
+    min_margin: float = 0.05
     tesseract_cmd: str = "tesseract"
     max_regions: int = 4
     work_max_side: int = 1600
