@@ -19,7 +19,7 @@ A new session should read this file first, then `CLAUDE.md`.
 | 9 | Field data + tuning loop | todo |
 | 10 | Windows packaging | done (CI build + packaged app start verified on GitHub) |
 | 11 | Test suite hardening | done |
-| 12 | Field test protocol (fa) | todo |
+| 12 | Field test protocol (fa) | done |
 
 ## Environment notes
 
@@ -352,6 +352,17 @@ Done:
 - Speed: Tesseract is skipped on variants whose glyph score < 0.6
   (`tess_min_glyph`): same accuracy on real frames and synthetic dev, ~20 %
   faster (0.85 → 0.68 s per real frame).
+
+## Task 12 — Field test protocol
+
+Done: `docs/field-test.fa.md` (Persian): equipment list, mounting (45 cm,
+straight-on, both cameras facing each other, light at 30–45°), laptop
+static IP 192.168.1.100 and camera IPs, camera web settings (Day mode,
+manual exposure 1/1000, WDR/anti-flicker/smart light/OSD off, H.264 CBR max
+bitrate, 10–12 fps, I-frame 10), setup-wizard checks with pass criteria,
+15-minute test-mode session with a mix of hard cases and the confirm/correct
+keys, 2-minute raw recording per camera, what to zip and send (password
+removed from config), troubleshooting table. Bundled into the Windows zip.
 
 ## Decisions
 
