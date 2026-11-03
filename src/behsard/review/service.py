@@ -162,17 +162,23 @@ def export_labels(repo: Repository, media_dir: str | Path, out_dir: str | Path) 
         if not files:
             continue
         stamp = repo.get_stamp(r.stamp_id) if r.stamp_id else None
+        active = list(ev.meta.get("candidates") or []) or [  # type: ignore[call-overload]
+            a.code for a in svc.active_stamps(ev.conveyor_id, ev.ts)
+        ]
         labels.append(
             {
                 "file": files,
                 "stamp": stamp.code if stamp else None,
-                "active": [a.code for a in svc.active_stamps(ev.conveyor_id, ev.ts)],
+                "active": active,
                 "meta": {
                     "event_id": event_id,
                     "conveyor": ev.conveyor_id,
                     "ts": ev.ts.isoformat(),
                     "auto_guess": ev.meta.get("best_guess"),
-                    "source": "manual_review",
+                    "source": "test_mode" if ev.mode == "test" else "manual_review",
+                    "mode": ev.mode,
+                    "auto_stamp": ev.meta.get("stamp_code"),
+                    "scores": ev.meta.get("scores"),
                 },
             }
         )

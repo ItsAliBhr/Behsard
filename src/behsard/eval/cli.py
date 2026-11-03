@@ -53,3 +53,23 @@ def run_eval(args: argparse.Namespace) -> int:
                 out = out.with_name(f"{out.stem}_{Path(folder).name}{out.suffix}")
             out.write_text(json.dumps(report.to_dict(), indent=1, ensure_ascii=False))
     return 0
+
+
+def _rt_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--data", required=True, help="labeled folder (e.g. 'labeled' from a field export)")
+    p.add_argument("--out", default=None, help="templates file (default: recognition.templates_path)")
+    p.add_argument("--test-frac", type=float, default=0.5)
+    p.add_argument("--dry-run", action="store_true", help="report only, do not write templates")
+
+
+@command("rebuild-templates", _rt_args)
+def rebuild_templates(args: argparse.Namespace) -> int:
+    from behsard.eval.tuning import rebuild
+
+    cfg = load_config(args.config)
+    out = None if args.dry_run else (args.out or cfg.resolve(cfg.recognition.templates_path))
+    res = rebuild(args.data, out, test_frac=args.test_frac)
+    print(res.table())
+    if out:
+        print(f"templates written to {out} (learned from all samples); restart the app to use them")
+    return 0

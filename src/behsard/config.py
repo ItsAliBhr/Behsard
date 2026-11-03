@@ -25,6 +25,7 @@ class RecognitionConfig:
     tesseract_cmd: str = "tesseract"
     max_regions: int = 4
     work_max_side: int = 1600
+    templates_path: str = "data/templates/learned.npz"  # learned from real crops
 
 
 @dataclass

@@ -182,6 +182,14 @@ def _best_cut(col: np.ndarray, k: int) -> int:
 CODE_H, CODE_W = 28, 80  # whole-code comparison size
 
 
+def code_vector(line_bw: np.ndarray) -> np.ndarray | None:
+    """Whole-code vector of a binarised line (for learning templates)."""
+    labels, _, ids = clean_line(line_bw)
+    if len(ids) == 0:
+        return None
+    return _code_vec(np.isin(labels, ids).astype(np.uint8))
+
+
 def _code_vec(mask: np.ndarray) -> np.ndarray | None:
     ys, xs = np.nonzero(mask > 0)
     if len(ys) < 10:
@@ -222,9 +230,48 @@ def code_templates(code: str) -> np.ndarray:
     return np.stack([v for v in vecs if v is not None])
 
 
+# Templates learned from real, supervisor-confirmed stamp crops
+# (``behsard rebuild-templates``). They are added to the font templates.
+_LEARNED: dict[str, dict[str, np.ndarray]] = {"glyph": {}, "code": {}}
+
+
+def set_learned(glyph: dict[str, np.ndarray], code: dict[str, np.ndarray]) -> None:
+    _LEARNED["glyph"] = {k: np.asarray(v, np.float32) for k, v in glyph.items() if len(v)}
+    _LEARNED["code"] = {k: np.asarray(v, np.float32) for k, v in code.items() if len(v)}
+
+
+def clear_learned() -> None:
+    set_learned({}, {})
+
+
+def save_learned(path: str | Path, glyph: dict[str, np.ndarray], code: dict[str, np.ndarray]) -> None:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    arrays = {f"g_{k}": np.asarray(v, np.float32) for k, v in glyph.items() if len(v)}
+    arrays.update({f"c_{k}": np.asarray(v, np.float32) for k, v in code.items() if len(v)})
+    np.savez_compressed(p, **arrays)
+
+
+def load_learned(path: str | Path) -> int:
+    """Load learned templates if the file exists; returns the vector count."""
+    p = Path(path)
+    if not p.exists():
+        clear_learned()
+        return 0
+    data = np.load(p)
+    glyph = {k[2:]: data[k] for k in data.files if k.startswith("g_")}
+    code = {k[2:]: data[k] for k in data.files if k.startswith("c_")}
+    set_learned(glyph, code)
+    return sum(len(v) for v in glyph.values()) + sum(len(v) for v in code.values())
+
+
 class GlyphScorer:
     def __init__(self) -> None:
-        self.tmpl, self.font_names = templates()
+        base, self.font_names = templates()
+        self.tmpl = dict(base)
+        for ch, vecs in _LEARNED["glyph"].items():
+            if ch in self.tmpl:
+                self.tmpl[ch] = np.vstack([self.tmpl[ch], vecs])
 
     def char_scores(self, glyph: np.ndarray, alphabet: str) -> dict[str, float]:
         v = normalise_glyph(glyph)
@@ -254,7 +301,13 @@ class GlyphScorer:
         v = _code_vec(np.isin(labels, ids).astype(np.uint8))
         if v is None:
             return {c: 0.0 for c in active}
-        return {c: float((code_templates(c) @ v).max()) for c in active}
+        out = {}
+        for c in active:
+            t = code_templates(c)
+            if c in _LEARNED["code"]:
+                t = np.vstack([t, _LEARNED["code"][c]])
+            out[c] = float((t @ v).max())
+        return out
 
     @staticmethod
     def code_scores(pos: list[dict[str, float]], active: Sequence[str]) -> dict[str, float]:

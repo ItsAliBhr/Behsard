@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}تنظیمات پیشرفته{% endblock %}
+{% block content %}
+{% if message %}<div class="flash ok">{{ message }}</div>{% endif %}
+<div class="grid2">
+<div class="card">
+  <h2 style="margin-top:0">آستانه‌های تشخیص و ردیابی</h2>
+  <p class="muted">فقط برای تنظیم در محل. تغییرات ردیابی دوربین‌ها را دوباره راه‌اندازی می‌کند.</p>
+  <form method="post" action="/advanced/save">
+    <table>
+      <tr><th>تنظیم</th><th>مقدار</th><th>پیش‌فرض</th></tr>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.label }}</td>
+        <td><input class="ltr" name="{{ r.name }}" value="{{ r.value }}" size="7" type="number" step="any" min="{{ r.lo }}" max="{{ r.hi }}"></td>
+        <td class="num muted">{{ r.default }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    <p><button class="primary" id="save-advanced">ذخیره و اعمال</button></p>
+  </form>
+  <form method="post" action="/advanced/defaults" onsubmit="return confirm('همه تنظیمات بالا به پیش‌فرض برگردد؟')">
+    <button id="restore-defaults">بازگرداندن تنظیمات پیش‌فرض</button>
+  </form>
+</div>
+<div class="card">
+  <h2 style="margin-top:0">داده‌های میدانی</h2>
+  <p>همه کارتن‌های ثبت‌شده، تصمیم‌های بررسی دستی و حالت آزمایش، برش‌های مهر و تنظیمات (بدون رمز دوربین) در یک فایل zip برای ارسال به تیم تنظیم.</p>
+  <form method="post" action="/advanced/export"><button class="primary" id="export-field">خروجی داده‌های میدانی (zip)</button></form>
+  {% if exports %}<p class="muted">خروجی‌های قبلی در <span class="ltr">data\exports</span>: {{ exports|join("، ") }}</p>{% endif %}
+  <h3>الگوهای یادگرفته‌شده از مهرهای واقعی</h3>
+  <p>تعداد الگوهای بارگذاری‌شده: <b>{{ learned|fa if learned and learned > 0 else '۰' }}</b> · فایل: <span class="ltr">{{ templates_path }}</span></p>
+  <p class="muted">برای ساخت الگو از کارتن‌های تأییدشده (روی رایانه تیم تنظیم):<br>
+    <span class="ltr">behsard rebuild-templates --data &lt;پوشه labeled از فایل zip&gt;</span><br>
+    جدول دقت «قبل/بعد» چاپ می‌شود؛ فایل الگو را در مسیر بالا کپی کنید و برنامه را دوباره اجرا کنید.</p>
+</div>
+</div>
+{% endblock %}

@@ -15,7 +15,7 @@ import pytest
 pytestmark = pytest.mark.e2e
 
 FA = str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789")
-PAGES = ["/", "/cameras", "/cameras/new", "/shifts", "/review", "/reports", "/test", "/replay"]
+PAGES = ["/", "/cameras", "/cameras/new", "/shifts", "/review", "/reports", "/test", "/replay", "/advanced"]
 
 
 def _num(text: str) -> int:

@@ -126,6 +126,7 @@ class StampRecognizer:
         weights: tuple[float, float, float] = (1.0, 1.0, 1.0),
         early_accept: float = 0.8,
         tess_min_glyph: float = 0.6,
+        load_templates: bool = True,
     ) -> None:
         self.cfg = cfg or RecognitionConfig()
         self.early_accept = early_accept
@@ -144,6 +145,11 @@ class StampRecognizer:
         total = wt + wg + ww
         # weights of (tesseract, per-glyph, whole-code) evidence
         self.weights = (wt / total, wg / total, ww / total)
+        from behsard.recognition.glyphs import load_learned
+
+        # learned templates from real crops (file from `behsard rebuild-templates`);
+        # load_templates=False keeps whatever is in memory (tuning script)
+        self.learned_templates = load_learned(self.cfg.templates_path) if load_templates else -1
         self.glyphs = GlyphScorer()
         from behsard.runtime import configure_tesseract
 

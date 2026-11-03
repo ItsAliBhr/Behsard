@@ -16,7 +16,7 @@ A new session should read this file first, then `CLAUDE.md`.
 | 6 | Shift admin + reports | done |
 | 7 | Live capture | done (phase 2) |
 | 8 | Operator GUI | done |
-| 9 | Field data + tuning loop | todo |
+| 9 | Field data + tuning loop | done |
 | 10 | Windows packaging | done (CI build + packaged app start verified on GitHub) |
 | 11 | Test suite hardening | done |
 | 12 | Field test protocol (fa) | done |
@@ -364,6 +364,41 @@ bitrate, 10–12 fps, I-frame 10), setup-wizard checks with pass criteria,
 keys, 2-minute raw recording per camera, what to zip and send (password
 removed from config), troubleshooting table. Bundled into the Windows zip.
 
+## Task 9 — Field data collection + tuning loop
+
+Done:
+- Every carton event already stores full-res best frames of both sides
+  (`*_frame{i}.jpg`), the carton crops the recognizer saw (`*_carton{i}.jpg`),
+  the stamp crop, recognizer candidates + scores (`meta`), and the final
+  decision (status + `manual_review`). Test-mode labels keep their test stamp
+  list as the `active` set.
+- `review/field_export.py` + **«خروجی داده‌های میدانی»** button (`/advanced`):
+  zip with `labeled/` (eval format, loadable by `behsard eval`),
+  `events.jsonl` (all events, scores, decisions), `config.yaml` (passwords
+  masked), `summary.json`; also kept in `data/exports/`.
+- `eval/tuning.py` + `behsard rebuild-templates --data labeled/`: deterministic
+  train/test split, learns whole-code and per-glyph templates from the best
+  matching reading of each confirmed crop, prints before/after table on the
+  held-out half, saves `data/templates/learned.npz` (learned from all
+  samples). The recognizer loads it at start (`recognition.templates_path`).
+- `/advanced`: recognizer and tracker thresholds editable with clamped ranges,
+  "restore defaults", camera restart on save; shows loaded template count.
+- Tests: `tests/test_field.py`.
+
+Tuning result on the real frames (`tests/fixtures/frames`, split 29/26):
+
+| metric | before | after |
+|---|---|---|
+| accuracy | 35.7 % | 78.6 % |
+| rejection | 80.8 % | 57.7 % |
+| error | 0 % | 0 % |
+| top-1 | 78.6 % | 85.7 % |
+
+Caveat: all real fixtures show the single stamp A12 and come from two clips,
+so neighbouring seconds of one carton can fall in both halves; real gains
+must be measured on field data with many stamps (exactly what the export +
+rebuild loop is for). The learned file is **not** shipped by default.
+
 ## Decisions
 
 - **Timestamps** are naive local site time stored as ISO strings. Single site,
@@ -419,6 +454,10 @@ removed from config), troubleshooting table. Bundled into the Windows zip.
   DB, so the same review/label tools work, but production numbers stay clean.
 - Camera passwords are stored in the local config file (data folder on the
   site laptop, not the repo) and never logged (`redact`).
+- **Learned templates are added to, not replacing, the font templates**, so
+  stamps never seen in the field still work; they are only used after
+  `rebuild-templates` writes the file (opt-in per site).
+- **Tuning gain is always reported on a held-out half** of the labeled data.
 - **Portable one-folder zip, not an installer**: unzip and double-click;
   data lives next to the exe (backup = copy `config/` and `data/`).
 - **Console window kept** for the exe: visible log, obvious way to stop.

@@ -86,6 +86,7 @@ def create_app(
 
     from behsard.web import (
         admin_routes,
+        advanced_routes,
         camera_routes,
         live_routes,
         report_routes,
@@ -93,6 +94,6 @@ def create_app(
         testmode_routes,
     )
 
-    for m in (live_routes, review_routes, admin_routes, report_routes, camera_routes, testmode_routes):
+    for m in (live_routes, review_routes, admin_routes, report_routes, camera_routes, testmode_routes, advanced_routes):
         app.include_router(m.router)
     return app
