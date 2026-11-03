@@ -8,7 +8,7 @@ A new session should read this file first, then `CLAUDE.md`.
 | # | Task | Status |
 |---|------|--------|
 | 1 | Scaffold + domain model | done |
-| 2 | Synthetic data + eval harness | todo |
+| 2 | Synthetic data + eval harness | done |
 | 3 | StampRecognizer v1 | todo |
 | 4 | Offline video pipeline | todo |
 | 5 | Manual review UI | todo |
@@ -35,6 +35,30 @@ Plan:
 
 Done: all of the above, 8 tests in `tests/test_core.py`.
 
+## Task 2 — Synthetic data + eval harness
+
+Plan:
+- `eval/synth.py`: backgrounds (kraft, kraft with dark/yellow print, white
+  with red print) + distractors (blue belt strip, carton seams); stamp text
+  rendered with system bold sans fonts (PIL), rubber texture (speckle holes,
+  uneven pressure), faint and partial variants, rotation (60% near
+  0/90/180/270, 40% any), shear, multiply-blend navy/blue ink; camera effects
+  (gain, colour cast, gradient light, gamma, blur, motion blur, noise, JPEG).
+  Labels in `labels.json` with the active set (12–16 codes incl. one-char
+  "confusers" such as A12/A17/B12) and meta (background, angle, faint, ...).
+- `eval/harness.py`: `load_samples`, `evaluate(recognizer, samples)`,
+  metrics + confusion + per-meta breakdown; `behsard gen-synth`, `behsard eval`.
+- `recognition/base.py`: `Recognizer` protocol + `Result` (needed by eval).
+- Real-image labels: `tests/fixtures/images/labels.json`.
+
+Done: all of the above; tests in `tests/test_eval.py`.
+
+Metric definitions (used for all numbers below):
+- accuracy = stamped cartons auto-credited to the right stamp / stamped cartons
+- rejection rate = cartons sent to manual review / all cartons
+- error rate = wrongly auto-credited cartons / auto-accepted cartons
+- top-1 = best candidate correct, ignoring the reject decision
+
 ## Decisions
 
 - **Timestamps** are naive local site time stored as ISO strings. Single site,
@@ -52,6 +76,10 @@ Done: all of the above, 8 tests in `tests/test_core.py`.
 - The originally committed `tests/fixtures/videos/IMG_5796.MOV` was a 2-byte
   placeholder; the user later uploaded the real videos, which replaced it as
   downscaled `.mp4` copies.
+
+- Negative (unstamped) samples are labeled `stamp: null`; 10% of synthetic data.
+- Synthetic stamps are never drawn over the blue belt strip (a stamp is on
+  the carton), but the belt is always a distractor for the blue mask.
 
 ## Recognition accuracy
 

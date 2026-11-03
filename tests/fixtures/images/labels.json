@@ -1,0 +1,6 @@
+[
+ {"file": "A12.png", "stamp": "A12", "active": ["A12", "A17", "B12", "B07", "C15", "D03", "F21", "G14", "H11", "K12", "M21", "R12"], "meta": {"source": "video-screenshot", "background": "kraft", "angle": 0}},
+ {"file": "A12_1.png", "stamp": "A12", "active": ["A12", "A17", "B12", "B07", "C15", "D03", "F21", "G14", "H11", "K12", "M21", "R12"], "meta": {"source": "video-screenshot", "background": "kraft", "angle": 270}},
+ {"file": "A12_2.png", "stamp": "A12", "active": ["A12", "A17", "B12", "B07", "C15", "D03", "F21", "G14", "H11", "K12", "M21", "R12"], "meta": {"source": "video-screenshot", "background": "kraft", "angle": 0}},
+ {"file": "photo_2026-11-03_15-37-45.jpg", "stamp": "A12", "active": ["A12", "A17", "B12", "B07", "C15", "D03", "F21", "G14", "H11", "K12", "M21", "R12"], "meta": {"source": "cctv", "background": "kraft_print", "angle": 0}}
+]
