@@ -1,7 +1,7 @@
 # Progress
 
 Phase 1: `docs/tasks.md` tasks 1–6 done. Phase 2: `docs/tasks-phase2.md`
-tasks 7–12 (order of work: 7, 8, 10, then 11, 12, 9).
+tasks 7–12 done (order of work: 7, 8, 10, then 11, 12, 9); released v0.2.0.
 A new session should read this file first, then `CLAUDE.md`.
 
 ## Status
@@ -17,7 +17,7 @@ A new session should read this file first, then `CLAUDE.md`.
 | 7 | Live capture | done (phase 2) |
 | 8 | Operator GUI | done |
 | 9 | Field data + tuning loop | done |
-| 10 | Windows packaging | done (CI build + packaged app start verified on GitHub) |
+| 10 | Windows packaging | done (CI: build + clean-runner acceptance green) |
 | 11 | Test suite hardening | done |
 | 12 | Field test protocol (fa) | done |
 
@@ -417,6 +417,43 @@ rebuild loop is for). The learned file is **not** shipped by default.
   times within 0.1 s.
 - Tests pinned to ubuntu-24.04 (Tesseract 5.3.4, the version the regression
   thresholds were measured with; ubuntu-latest ships 5.5).
+
+## Phase 2 final state (release v0.2.0)
+
+CI (GitHub Actions, branch `claude/brave-galileo-0f4ujf`):
+- `tests` (ubuntu-24.04): full suite green — unit, regression thresholds,
+  end-to-end, HTTP + **RTSP/MediaMTX** camera tests (incl. 20 s drop), browser
+  smoke test.
+- `windows-build`: PyInstaller zip built; on a **clean Windows runner** the
+  packaged `Behsard.exe` starts, creates config/data, `/health` OK, Playwright
+  smoke test passes against it, replay check 8/8 cartons, 0 wrong credits.
+- Release: tag `v0.2.0` publishes `Behsard-windows-x64-v0.2.0.zip`.
+
+Final numbers:
+| Check | Result |
+|---|---|
+| Real screenshots (4) | 100 % correct, 0 % error |
+| Real video frames (55) | 42.9 % auto-correct, 0 % error, top-1 71.4 % (0.68 s/frame) |
+| Real frames after `rebuild-templates` (held-out half) | 78.6 % auto-correct, 0 % error (single stamp A12 — see caveat) |
+| Synthetic test (500) | 58 % auto-correct, 0.4 % error |
+| Synthetic conveyor streams (10 camera streams) | every carton counted, no extras, times ± 0.1 s |
+| Live 2-camera synthetic | exact carton count, 0 double counts, 0 wrong credits, latency < 5 s |
+| Camera outage 20 s | recovered in 6.7 s (< 10 s) |
+| 2 cameras 3200×1800 @10 fps (4-core container) | CPU ≈ 35–38 % of machine; RSS ~1.1–1.25 GB, +5 % over 4 min after warm-up (2 h soak runs nightly in CI) |
+
+Known limitations:
+- **No real fixed-camera footage yet**: tracking is validated on synthetic
+  video and simulated cameras only; the handheld sample clips cannot be
+  tracked. First field step: record 2 min per mounted camera
+  (`docs/field-test.fa.md`) and tune `/advanced`.
+- Recognition on real footage is limited by the low-resolution phone clips and
+  the unknown real stamp font; the template loop needs field labels with
+  many different stamps.
+- Memory ~1.2 GB for 2 full-res cameras; the 2 h < 10 % growth criterion is
+  checked by the nightly soak job, not yet observed here.
+- Plastic crates with paper liner are out of scope (low accuracy).
+- No login/roles in the web UI; the app listens on 127.0.0.1 only by default.
+- MediaMTX could not be run in the dev sandbox; RTSP tests run in CI only.
 
 ## Decisions
 

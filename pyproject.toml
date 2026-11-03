@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "behsard"
-version = "0.1.0"
+version = "0.2.0"
 description = "On-site per-worker carton counting by reading ink stamps with cameras"
 requires-python = ">=3.11"
 dependencies = [
