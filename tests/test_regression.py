@@ -28,7 +28,7 @@ def test_real_screenshots_regression(rec: StampRecognizer) -> None:
 
 def test_real_video_frames_regression(rec: StampRecognizer) -> None:
     s = evaluate(rec, load_samples(FIXTURES / "frames")).summary()
-    assert s["accuracy"] >= 0.42, s  # measured 0.4286
-    assert s["top1_accuracy"] >= 0.70, s  # measured 0.7143
+    assert s["accuracy"] >= 0.48, s  # measured 0.50
+    assert s["top1_accuracy"] >= 0.80, s  # measured 0.8214
     assert s["error_rate"] == 0.0, s
     assert s["unstamped_false_accepts"] == 0, s

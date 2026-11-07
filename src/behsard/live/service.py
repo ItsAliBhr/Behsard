@@ -16,6 +16,7 @@ most the carton currently in view.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 import queue
 import threading
 import time
@@ -313,8 +314,13 @@ class LiveService:
         assert ev.id is not None
         code = ev.meta.get("stamp_code")
         label = str(code) if code else "؟"
-        left_line = max(s.ts for s in seen)  # carton centre crossed the line
-        latency = max(0.0, time.time() - left_line.timestamp())
+        # the carton has left the counting line when its trailing edge
+        # crossed it (second boundary); latency = from then to stored event
+        def left_at(s: CartonSighting) -> float:
+            t2 = s.meta.get("t_second_edge")
+            return datetime.fromisoformat(str(t2)).timestamp() if t2 else s.ts.timestamp()
+
+        latency = max(0.0, time.time() - max(left_at(s) for s in seen))
         self.recent.appendleft(
             RecentEvent(
                 ev.id, [s.camera_id for s in seen], ev.conveyor_id, label, ev.confidence,

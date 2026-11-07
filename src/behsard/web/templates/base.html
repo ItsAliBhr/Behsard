@@ -52,6 +52,9 @@
   .help { font-size:13px; line-height:2; }
   .pending { font-size:18px; }
   #typed-hint:empty { display:none; }
+  #roi-wrap { position:relative; display:inline-block; max-width:100%; user-select:none; }
+  #roi-wrap img { max-width:100%; display:block; }
+  #roi-canvas { position:absolute; inset:0; width:100%; height:100%; cursor:crosshair; }
   {% block style %}{% endblock %}
 </style>
 </head>

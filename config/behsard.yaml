@@ -25,7 +25,7 @@ recognition:
   # Minimum margin between best and second-best stamp score.
   min_margin: 0.05
   tesseract_cmd: tesseract
-  max_regions: 4
+  max_regions: 8
   # Recognize on a downscaled copy whose long side is at most this many px.
   work_max_side: 1600
 

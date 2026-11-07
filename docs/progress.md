@@ -460,6 +460,34 @@ Known limitations:
 - No login/roles in the web UI; the app listens on 127.0.0.1 only by default.
 - MediaMTX could not be run in the dev sandbox; RTSP tests run in CI only.
 
+## First real fixed-camera test (user video, Hikvision 3200×1800, 2026-11-07)
+
+User's replay of a fixed-camera clip (one box pushed by hand across a room
+floor, box in the lower half of the frame, sofa/wall/laptop around it) showed
+**nothing**. Findings and fixes (v0.2.1):
+- **Tracking:** replay had no watch region, so the static background (upper
+  half) dominated the motion estimate → 0 cartons. Replay now has a setup step
+  that shows 4 frames of the video to draw the ROI on (shared `static/roi.js`
+  with the camera wizard); the replay page shows the result and, when nothing
+  was tracked, Persian hints (fixed camera, ROI on the carton strip,
+  horizontal motion, carton ≥ ¼ of the ROI). With the ROI the clip gives 3
+  carton events for its 3 passes (before: 0).
+- **Recognition:** the stamp `A12` is readable (≈58 px letters) but the "1"
+  prints very faintly and splits into dots, so A and 2 were never grouped and
+  the stamp was not even a candidate. Added *gapped pairs* (first + last
+  character, middle one missing) and `max_regions` 4 → 8. Real frames: accuracy
+  43 % → **50 %**, top-1 71 % → **82 %**, error 0 %; synthetic unchanged.
+  On the user's clip the best guess is now `A12` for all 3 cartons, but with
+  low confidence (11–26 %) → confirmation, not auto-credit. Reading weak
+  prints is fragile (JPEG re-compression flips results); remedy on site: a
+  well-inked stamp and the camera closer (45 cm) so letters are ~2× larger.
+- A blue-hue ranking cue helped this clip but hurt the phone frames (blue
+  belt in view): kept as opt-in `recognition.blue_boost` (default off).
+- Recognizer time budget 2.5 s per carton; live latency is now measured from
+  the carton's trailing edge leaving the counting line (was: centre, which
+  wrongly included belt stops).
+- Regression thresholds raised: frames accuracy ≥ 0.48, top-1 ≥ 0.80.
+
 ## Decisions
 
 - **Timestamps** are naive local site time stored as ISO strings. Single site,

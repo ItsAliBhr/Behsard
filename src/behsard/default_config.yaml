@@ -14,7 +14,7 @@ recognition:
   accept_threshold: 0.45
   min_margin: 0.05
   tesseract_cmd: tesseract
-  max_regions: 4
+  max_regions: 8
   work_max_side: 1600
 tracking:
   roi: [0.0, 0.0, 1.0, 1.0]

@@ -155,9 +155,25 @@ async def test_reopen(request: Request, event_id: int) -> HTMLResponse:
 @router.get("/replay", response_class=HTMLResponse)
 async def replay_page(request: Request) -> HTMLResponse:
     live = request.app.state.live
+    info = getattr(request.app.state, "replay_info", None)
+    health = live.health().get(REPLAY_ID)
+    result = None
+    if info:
+        evs = [
+            e for e in request.app.state.repo.list_carton_events(after_id=info["after_id"], limit=100_000)
+            if e.mode in ("replay", "test")
+        ]
+        result = {
+            "file": info["file"],
+            "events": len(evs),
+            "read": sum(1 for e in evs if e.meta.get("stamp_code")),
+            "sightings": health["sightings"] if health else info.get("sightings", 0),
+            "moving": health["fps_out"] if health else None,
+        }
     ctx = {
         "request": request, "nav": "replay", "conveyors": request.app.state.repo.list_conveyors(),
-        "running": REPLAY_ID in live.cameras, "health": live.health().get(REPLAY_ID),
+        "running": REPLAY_ID in live.cameras and (health or {}).get("state") != "finished",
+        "health": health, "result": result,
         "files": sorted(p.name for p in _replay_dir(request).glob("*") if p.is_file()),
     }
     return request.app.state.templates.TemplateResponse(request, "replay.html", ctx)
@@ -169,6 +185,76 @@ def _replay_dir(request: Request) -> Path:
     return d
 
 
+def _resolve_video(request: Request, path: str) -> Path | None:
+    src = path.strip().strip('"')
+    if not src:
+        return None
+    p = Path(src)
+    if not p.is_absolute():
+        p = _replay_dir(request) / src
+    return p if p.exists() else None
+
+
+def _snapshots(request: Request, video: Path, n: int = 4) -> list[str]:
+    """A few frames spread over the video (for drawing the watch region)."""
+    import cv2
+
+    d = request.app.state.media_dir / "snapshots"
+    d.mkdir(parents=True, exist_ok=True)
+    cap = cv2.VideoCapture(str(video))
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    out = []
+    for i in range(n):
+        if total > 0:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int(total * (i + 1) / (n + 1)))
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            continue
+        s = 1280 / frame.shape[1]
+        if s < 1:
+            frame = cv2.resize(frame, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
+        name = f"replay_{i}.jpg"
+        cv2.imwrite(str(d / name), frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        out.append(f"snapshots/{name}")
+    cap.release()
+    return out
+
+
+@router.post("/replay/prepare")
+async def replay_prepare(
+    request: Request, path: str = Form(""), upload: UploadFile | None = File(None)
+) -> RedirectResponse:
+    """Step 1: store/locate the video, then draw the watch region on it."""
+    if upload is not None and upload.filename:
+        dst = _replay_dir(request) / Path(upload.filename).name
+        with dst.open("wb") as f:
+            shutil.copyfileobj(upload.file, f)
+        path = str(dst)
+    video = _resolve_video(request, path)
+    if video is None:
+        return RedirectResponse("/replay?error=1", status_code=303)
+    from urllib.parse import quote
+
+    return RedirectResponse(f"/replay/setup?file={quote(str(video))}", status_code=303)
+
+
+@router.get("/replay/setup", response_class=HTMLResponse)
+async def replay_setup(request: Request, file: str) -> HTMLResponse:
+    import asyncio
+
+    video = _resolve_video(request, file)
+    if video is None:
+        return RedirectResponse("/replay?error=1", status_code=303)  # type: ignore[return-value]
+    snaps = await asyncio.to_thread(_snapshots, request, video)
+    roi = getattr(request.app.state, "replay_roi", None) or [0.0, 0.0, 1.0, 1.0]
+    ctx = {
+        "request": request, "nav": "replay", "file": str(video), "name": video.name,
+        "snaps": snaps, "roi": roi, "conveyors": request.app.state.repo.list_conveyors(),
+        "v": int(video.stat().st_mtime),
+    }
+    return request.app.state.templates.TemplateResponse(request, "replay_setup.html", ctx)
+
+
 @router.post("/replay/start")
 async def replay_start(
     request: Request,
@@ -178,24 +264,32 @@ async def replay_start(
     side: str = Form("L"),
     speed: float = Form(1.0),
     roi: str = Form(""),
+    x: str = Form(""),
+    y: str = Form(""),
+    w: str = Form(""),
+    h: str = Form(""),
 ) -> RedirectResponse:
     live = request.app.state.live
-    src = path.strip()
     if upload is not None and upload.filename:
         dst = _replay_dir(request) / Path(upload.filename).name
         with dst.open("wb") as f:
             shutil.copyfileobj(upload.file, f)
-        src = str(dst)
-    elif src and not Path(src).is_absolute():
-        src = str(_replay_dir(request) / src)
-    if not src or not Path(src).exists():
+        path = str(dst)
+    video = _resolve_video(request, path)
+    if video is None:
         return RedirectResponse("/replay?error=1", status_code=303)
     cam: dict[str, Any] = {
-        "id": REPLAY_ID, "url": src, "conveyor_id": conveyor_id, "side": side.upper()[:1] or "L",
+        "id": REPLAY_ID, "url": str(video), "conveyor_id": conveyor_id, "side": side.upper()[:1] or "L",
         "loop": False, "speed": max(0.25, min(speed, 8.0)),
     }
-    if roi:
-        cam["roi"] = [float(v) for v in roi.split(",")]
+    box = [x, y, w, h] if all(v.strip() for v in (x, y, w, h)) else (roi.split(",") if roi else [])
+    if len(box) == 4:
+        r = [min(max(float(v), 0.0), 1.0) for v in box]
+        if r[2] >= 0.05 and r[3] >= 0.05:
+            cam["roi"] = [round(v, 4) for v in r]
+            request.app.state.replay_roi = cam["roi"]
+    last = request.app.state.repo.list_carton_events(limit=1_000_000)
+    request.app.state.replay_info = {"file": video.name, "after_id": max((e.id or 0) for e in last) if last else 0}
     if not live.started:
         live.start()
     live.start_camera(cam, replay=True)
@@ -204,5 +298,10 @@ async def replay_start(
 
 @router.post("/replay/stop")
 async def replay_stop(request: Request) -> RedirectResponse:
-    request.app.state.live.stop_camera(REPLAY_ID)
+    live = request.app.state.live
+    lc = live.cameras.get(REPLAY_ID)
+    info = getattr(request.app.state, "replay_info", None)
+    if lc is not None and info is not None:
+        info["sightings"] = lc.worker.tracker.count
+    live.stop_camera(REPLAY_ID)
     return RedirectResponse("/replay", status_code=303)

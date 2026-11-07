@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
@@ -28,7 +29,7 @@ import pytesseract
 from behsard.config import RecognitionConfig
 from behsard.recognition.base import Result
 from behsard.recognition.glyphs import GlyphScorer
-from behsard.recognition.ink import InkParams, Region, ink_map, propose_regions
+from behsard.recognition.ink import InkParams, Region, blue_hue_map, ink_map, propose_regions
 from behsard.recognition.match import clean, match_scores
 from behsard.recognition.registry import register
 
@@ -127,9 +128,11 @@ class StampRecognizer:
         early_accept: float = 0.8,
         tess_min_glyph: float = 0.6,
         load_templates: bool = True,
+        time_budget: float = 2.5,
     ) -> None:
         self.cfg = cfg or RecognitionConfig()
         self.early_accept = early_accept
+        self.time_budget = time_budget  # seconds per carton (0 = no limit)
         # skip Tesseract on variants where the glyph reader sees nothing
         # stamp-like (saves ~150 ms per call on unstamped cartons)
         self.tess_min_glyph = tess_min_glyph
@@ -167,10 +170,14 @@ class StampRecognizer:
         active = [s.strip().upper() for s in active_stamps]
         readings: list[Reading] = []
         result = Result(stamp=None, confidence=0.0)
+        t0 = time.perf_counter()
         for i, img in enumerate(images):
             readings.extend(self.read_image(img, i))
             result = self.decide(readings, active)
             if result.stamp is not None and result.confidence >= self.early_accept and i + 1 < len(images):
+                break
+            # live latency guard: decide with what has been read so far
+            if self.time_budget and time.perf_counter() - t0 > self.time_budget:
                 break
         return result
 
@@ -178,7 +185,10 @@ class StampRecognizer:
     def read_image(self, img: np.ndarray, image_index: int = 0) -> list[Reading]:
         img = self._resize(img)
         mask, strength = ink_map(img, self.ink)
-        regions = propose_regions(mask, strength, max_regions=self.cfg.max_regions)
+        regions = propose_regions(
+            mask, strength, max_regions=self.cfg.max_regions,
+            blue=blue_hue_map(img) if self.cfg.blue_boost else None,
+        )
         readings: list[Reading] = []
         for ri, region in enumerate(regions):
             for angle in base_angles(region):

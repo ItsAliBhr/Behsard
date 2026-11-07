@@ -23,7 +23,10 @@ class RecognitionConfig:
     accept_threshold: float = 0.45
     min_margin: float = 0.05
     tesseract_cmd: str = "tesseract"
-    max_regions: int = 4
+    max_regions: int = 8
+    # rank blue-hued candidates higher; helps when only carton faces are in the
+    # watch region, hurts when a blue belt is in view -> off by default
+    blue_boost: bool = False
     work_max_side: int = 1600
     templates_path: str = "data/templates/learned.npz"  # learned from real crops
 

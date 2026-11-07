@@ -99,9 +99,24 @@ class _Comp:
     cx: float
     cy: float
     strength: float
+    blue: float = 0.0  # fraction of pixels with a blue hue (stamp ink cue)
 
 
-def _components(mask: np.ndarray, strength: np.ndarray, min_char: int, max_char: float) -> tuple[list[_Comp], np.ndarray]:
+def blue_hue_map(img: np.ndarray, min_s: int = 30, min_v: int = 25) -> np.ndarray:
+    """Pixels whose hue is blue (navy included): the stamp-ink colour cue.
+
+    Weaker than the strict HSV test in :func:`ink_map` (low saturation is
+    allowed) because it only *ranks* candidates; black/brown print fails it.
+    """
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    return (h >= 95) & (h <= 135) & (s >= min_s) & (v >= min_v)
+
+
+def _components(
+    mask: np.ndarray, strength: np.ndarray, min_char: int, max_char: float,
+    blue: np.ndarray | None = None,
+) -> tuple[list[_Comp], np.ndarray]:
     m = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
     n, labels, stats, cents = cv2.connectedComponentsWithStats(m, connectivity=8)
     comps = []
@@ -117,7 +132,8 @@ def _components(mask: np.ndarray, strength: np.ndarray, min_char: int, max_char:
             continue
         roi = labels[y : y + ch, x : x + cw] == i
         st = float(strength[y : y + ch, x : x + cw][roi].mean())
-        comps.append(_Comp(i, x, y, cw, ch, float(size), float(cents[i][0]), float(cents[i][1]), st))
+        bl = float(blue[y : y + ch, x : x + cw][roi].mean()) if blue is not None else 0.0
+        comps.append(_Comp(i, x, y, cw, ch, float(size), float(cents[i][0]), float(cents[i][1]), st, bl))
     return comps, labels
 
 
@@ -145,6 +161,7 @@ def propose_regions(
     max_regions: int = 4,
     min_char: int = 8,
     max_char_frac: float = 0.45,
+    blue: np.ndarray | None = None,
 ) -> list[Region]:
     """Propose stamp candidates from character-sized ink components.
 
@@ -154,7 +171,7 @@ def propose_regions(
     lower-ranked fallbacks.
     """
     h, w = mask.shape
-    comps, labels = _components(mask, strength, min_char, max_char_frac * min(h, w))
+    comps, labels = _components(mask, strength, min_char, max_char_frac * min(h, w), blue)
     if not comps:
         return []
     n = len(comps)
@@ -168,7 +185,11 @@ def propose_regions(
     np.fill_diagonal(near, False)
 
     def ink_factor(cs: list[_Comp]) -> float:
-        return min(1.0, float(np.mean([c.strength for c in cs])) / 35.0)
+        f = min(1.0, float(np.mean([c.strength for c in cs])) / 35.0)
+        if blue is not None:
+            # blue/navy ink ranks above black or brown print
+            f *= 0.6 + 0.4 * min(1.0, 2.0 * float(np.mean([c.blue for c in cs])))
+        return f
 
     def size_factor(cs: list[_Comp]) -> float:
         return min(1.0, float(np.median([c.size for c in cs])) / 14.0)
@@ -209,6 +230,17 @@ def propose_regions(
             elong = max(max(c.w, c.h) / max(1, min(c.w, c.h)) for c in cs)
             score = 0.45 * (1.0 if elong >= 1.6 else 0.7) * ink_factor(cs) * size_factor(cs)
             cands[(i, j)] = score
+    # gapped pairs: first and last character with the middle one too faint
+    # to be found (thin "1"/"I" printed weakly): similar size, about two
+    # character pitches apart
+    gap = (dist > 1.5 * big) & (dist <= 2.8 * big) & (ratio <= 1.5)
+    for i in range(n):
+        for j in np.nonzero(gap[i])[0]:
+            j = int(j)
+            if j <= i or (i, j) in cands:
+                continue
+            cs = [comps[i], comps[j]]
+            cands[(i, j)] = 0.5 * ink_factor(cs) * size_factor(cs)
     # singles: all three characters merged into one elongated blob
     for i, c in enumerate(comps):
         elong = max(c.w, c.h) / max(1, min(c.w, c.h))

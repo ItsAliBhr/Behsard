@@ -129,3 +129,30 @@ def test_config_save_roundtrip(tmp_path: Path) -> None:
     again = load_config(p)
     assert again.cameras == cfg.cameras and again.test_mode.stamps == ["A12"]
     assert again.db_path == tmp_path / "data" / "behsard.sqlite"  # relative to data home
+
+
+def test_replay_setup_flow_with_roi(video: Path, tmp_path: Path) -> None:
+    """Replay: choose video -> frames to draw the watch region -> start with ROI."""
+    from fastapi.testclient import TestClient
+
+    from behsard.web.app import create_app
+
+    repo = SqliteRepository(":memory:")
+    cfg = Config()
+    cfg.home = tmp_path
+    cfg.conveyors = [{"id": 1, "name": "c1"}]
+    app = create_app(cfg, repo, tmp_path / "media", start_live=False)
+    c = TestClient(app)
+    r = c.post("/replay/prepare", data={"path": str(video / "left.mp4")}, follow_redirects=False)
+    assert r.status_code == 303 and "/replay/setup" in r.headers["location"]
+    page = c.get(r.headers["location"]).text
+    assert "roi-canvas" in page and page.count("snapshots/replay_") >= 4
+    c.post("/replay/start", data={"path": str(video / "left.mp4"), "x": "0.1", "y": "0.2", "w": "0.8", "h": "0.6", "speed": "4"})
+    live = app.state.live
+    try:
+        assert live.cameras["replay"].cfg["roi"] == [0.1, 0.2, 0.8, 0.6]
+        assert _wait(lambda: live.cameras["replay"].reader.health.state == "finished", 60)
+    finally:
+        live.stop()
+    html = c.get("/replay").text
+    assert "کارتن‌های ردیابی‌شده" in html
