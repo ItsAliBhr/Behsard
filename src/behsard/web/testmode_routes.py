@@ -247,7 +247,17 @@ async def replay_setup(request: Request, file: str) -> HTMLResponse:
         return RedirectResponse("/replay?error=1", status_code=303)  # type: ignore[return-value]
     snaps = await asyncio.to_thread(_snapshots, request, video)
     roi = getattr(request.app.state, "replay_roi", None) or [0.0, 0.0, 1.0, 1.0]
+    cfg = request.app.state.cfg
+    stamps = getattr(request.app.state, "replay_stamps", None) or list(cfg.test_mode.stamps)
+    if not stamps:  # fall back to the stamps of the open shift
+        from datetime import datetime
+
+        from behsard.core.services import ShiftService
+
+        svc = ShiftService(request.app.state.repo)
+        stamps = sorted({a.code for c in request.app.state.repo.list_conveyors() for a in svc.active_stamps(c.id, datetime.now())})
     ctx = {
+        "stamps": " ".join(stamps), "need_stamps": bool(request.query_params.get("need_stamps")),
         "request": request, "nav": "replay", "file": str(video), "name": video.name,
         "snaps": snaps, "roi": roi, "conveyors": request.app.state.repo.list_conveyors(),
         "v": int(video.stat().st_mtime),
@@ -268,6 +278,7 @@ async def replay_start(
     y: str = Form(""),
     w: str = Form(""),
     h: str = Form(""),
+    stamps: str = Form(""),
 ) -> RedirectResponse:
     live = request.app.state.live
     if upload is not None and upload.filename:
@@ -278,10 +289,27 @@ async def replay_start(
     video = _resolve_video(request, path)
     if video is None:
         return RedirectResponse("/replay?error=1", status_code=303)
+    from behsard.core.services import normalize_stamp_code
+
+    codes = []
+    for c in en_digits(stamps).replace(",", " ").replace("،", " ").split():
+        try:
+            codes.append(normalize_stamp_code(c))
+        except ValueError:
+            continue
+    codes = sorted(set(codes))
     cam: dict[str, Any] = {
         "id": REPLAY_ID, "url": str(video), "conveyor_id": conveyor_id, "side": side.upper()[:1] or "L",
         "loop": False, "speed": max(0.25, min(speed, 8.0)),
     }
+    if codes:
+        cam["stamps"] = codes
+        request.app.state.replay_stamps = codes
+    elif not live.active_codes(cam, __import__("datetime").datetime.now()):
+        # nothing to compare the stamps with: ask for the list
+        from urllib.parse import quote
+
+        return RedirectResponse(f"/replay/setup?file={quote(str(video))}&need_stamps=1", status_code=303)
     box = [x, y, w, h] if all(v.strip() for v in (x, y, w, h)) else (roi.split(",") if roi else [])
     if len(box) == 4:
         r = [min(max(float(v), 0.0), 1.0) for v in box]
@@ -302,6 +330,6 @@ async def replay_stop(request: Request) -> RedirectResponse:
     lc = live.cameras.get(REPLAY_ID)
     info = getattr(request.app.state, "replay_info", None)
     if lc is not None and info is not None:
-        info["sightings"] = lc.worker.tracker.count
+        info["sightings"] = lc.worker.sightings
     live.stop_camera(REPLAY_ID)
     return RedirectResponse("/replay", status_code=303)

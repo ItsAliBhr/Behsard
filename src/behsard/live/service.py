@@ -34,6 +34,7 @@ from behsard.live.recorder import Recorder
 from behsard.live.worker import CameraWorker
 from behsard.recognition.base import Recognizer
 from behsard.tracking.pipeline import Pipeline
+from behsard.tracking.spotter import SpotterParams, StampSpotter
 from behsard.tracking.tracker import CartonSighting, TrackerParams
 
 log = logging.getLogger(__name__)
@@ -169,18 +170,30 @@ class LiveService:
         cid = str(cam["id"])
         if cid in self.cameras:
             self.stop_camera(cid)
+        mode = str(cam.get("mode", self.cfg.tracking.mode))
+        spotter = None
+        if mode == "stamps" and hasattr(self.pipeline.recognizer, "spot"):
+            t = self.cfg.tracking
+            roi = tuple(float(v) for v in (cam.get("roi") or t.roi))
+            spotter = StampSpotter(
+                cid, self.pipeline.recognizer.spot, lambda ts, cam=cam: self.active_codes(cam, ts),
+                SpotterParams(roi=roi, interval_s=t.spot_interval_s, gap_s=t.spot_gap_s),  # type: ignore[arg-type]
+            )
         worker = CameraWorker(
             cid, str(cam.get("side", "L")).upper(), int(cam.get("conveyor_id", 1)),
-            tracker_params(self.cfg, cam), self._on_sighting,
+            tracker_params(self.cfg, cam), self._on_sighting, spotter=spotter, lossless=replay,
         )
         url = camera_url(cam)
         reader = CameraReader(
             cid, url, worker.submit,
             process_fps=float(cam.get("process_fps", self.cfg.tracking.process_fps)),
             loop=bool(cam.get("loop", not replay)),
-            realtime=bool(cam.get("realtime", True)),
+            # replay: every frame, as fast as this PC can, on the video's clock
+            realtime=bool(cam.get("realtime", not replay)),
             speed=float(cam.get("speed", 1.0)),
+            video_clock=replay,
         )
+        worker.source_done = lambda: reader.health.state == "finished"
         lc = LiveCamera(cam, reader, worker, replay=replay)
         if cam.get("record") and url.startswith("rtsp"):
             lc.recorder = Recorder(
@@ -230,6 +243,10 @@ class LiveService:
     def _on_sighting(self, s: CartonSighting) -> None:
         conveyor = int(s.meta.get("conveyor_id", 1))
         side = s.meta.get("side")
+        if s.result is not None:
+            # stamps mode: a stamp is on one side only, nothing to pair
+            self._rec_q.put((conveyor, s, None) if side != "R" else (conveyor, None, s))
+            return
         window = self.cfg.tracking.pair_window_s
         with self._held_lock:
             held = self._held.setdefault(conveyor, [])
@@ -279,20 +296,40 @@ class LiveService:
                 if lc.recorder:
                     lc.recorder.check_disk()
 
-    def _mode_for(self, sightings: list[CartonSighting]) -> tuple[str, dict[str, int] | None]:
+    def _stamp_ids(self, codes: list[str]) -> dict[str, int]:
+        ids = {}
+        for code in codes:
+            try:
+                st = self.shifts.ensure_stamp(code)
+            except ValueError:
+                continue
+            assert st.id is not None
+            ids[st.code] = st.id
+        return ids
+
+    def _stamp_source(self, cam: dict[str, Any] | None, replay: bool) -> tuple[str, list[str] | None]:
+        """(event mode, explicit stamp list or None = use the open shift)."""
+        if cam is not None and cam.get("stamps"):  # replay with its own stamp list
+            return "test", list(cam["stamps"])
         tm = self.cfg.test_mode
         if tm.enabled and tm.stamps:
-            ids = {}
-            for code in tm.stamps:
-                try:
-                    st = self.shifts.ensure_stamp(code)
-                except ValueError:
-                    continue
-                assert st.id is not None
-                ids[st.code] = st.id
-            return "test", ids
-        replay = any(self.cameras.get(s.camera_id) and self.cameras[s.camera_id].replay for s in sightings)
+            return "test", list(tm.stamps)
         return ("replay" if replay else "prod"), None
+
+    def active_codes(self, cam: dict[str, Any], ts: datetime) -> list[str]:
+        """Stamps the recognizer may choose from for this camera right now."""
+        _, explicit = self._stamp_source(cam, False)
+        if explicit is not None:
+            return sorted(self._stamp_ids(explicit))
+        # live cameras: the shift that is open now (replayed video carries
+        # old timestamps, so use the wall clock for the lookup)
+        return [a.code for a in self.shifts.active_stamps(int(cam.get("conveyor_id", 1)), datetime.now())]
+
+    def _mode_for(self, sightings: list[CartonSighting]) -> tuple[str, dict[str, int] | None]:
+        lcs = [self.cameras[s.camera_id] for s in sightings if s.camera_id in self.cameras]
+        cam = next((lc.cfg for lc in lcs if lc.cfg.get("stamps")), lcs[0].cfg if lcs else None)
+        mode, explicit = self._stamp_source(cam, any(lc.replay for lc in lcs))
+        return mode, (self._stamp_ids(explicit) if explicit is not None else None)
 
     def _recognition_loop(self) -> None:
         while not self._stop.is_set():
@@ -354,7 +391,8 @@ class LiveService:
                     "replay": lc.replay,
                     "dropped_processing": lc.worker.dropped,
                     "track_ms": round(lc.worker.proc_ms, 1),
-                    "sightings": lc.worker.tracker.count,
+                    "sightings": lc.worker.sightings,
+                    "mode": "stamps" if lc.worker.spotter is not None else "seams",
                     "recording": bool(lc.recorder and lc.recorder.running),
                     "record_error": lc.recorder.error if lc.recorder else "",
                 }

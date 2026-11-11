@@ -5,10 +5,11 @@
   .thumbs img.sel { border-color: var(--accent); }
 {% endblock %}
 {% block content %}
+{% if need_stamps %}<div class="flash err">فهرست مهرها خالی است. مهرهایی را که در این ویدیو روی کارتن‌ها زده شده وارد کنید (مثلاً A12).</div>{% endif %}
 <div class="card">
   <h2 style="margin-top:0">بازپخش <span class="ltr">{{ name }}</span>: ناحیه دید را رسم کنید</h2>
-  <p>با ماوس کادری بکشید که فقط <b>نوار عبور کارتن</b> را بپوشاند (دیوار، سقف، زمین و وسایل دیگر بیرون بمانند). خط قرمز وسط، خط شمارش است و کارتن باید کاملاً از آن عبور کند.
-     برای دیدن جای کارتن روی تصویرهای کوچک پایین کلیک کنید.</p>
+  <p><b>۱)</b> مهرهایی را که در این ویدیو روی کارتن‌ها هست در کادر پایین بنویسید. <b>۲)</b> اختیاری: با ماوس کادری بکشید که فقط محل عبور کارتن‌ها را بپوشاند (هرچه پس‌زمینه کمتر، تشخیص سریع‌تر و دقیق‌تر). <b>۳)</b> «شروع بازپخش».
+     برای دیدن جای کارتن روی تصویرهای کوچک کلیک کنید.</p>
   {% if snaps %}
   <div id="roi-wrap"><img id="snap" src="/media/{{ snaps[0] }}?v={{ v }}" alt=""><canvas id="roi-canvas"></canvas></div>
   <div class="thumbs">{% for s in snaps %}<img src="/media/{{ s }}?v={{ v }}" class="{{ 'sel' if loop.first }}" onclick="document.getElementById('snap').src=this.src;document.querySelectorAll('.thumbs img').forEach(i=>i.classList.remove('sel'));this.classList.add('sel')">{% endfor %}</div>
@@ -19,9 +20,9 @@
     <input type="hidden" name="path" value="{{ file }}">
     <input type="hidden" name="x" value="{{ roi[0] }}"><input type="hidden" name="y" value="{{ roi[1] }}">
     <input type="hidden" name="w" value="{{ roi[2] }}"><input type="hidden" name="h" value="{{ roi[3] }}">
+    <label><b>مهرهای موجود در ویدیو</b> (با فاصله)<br><input name="stamps" id="replay-stamps" class="ltr" size="28" value="{{ stamps }}" placeholder="A12 B07 C15" required></label>
     <label>نقاله<br><select name="conveyor_id">{% for c in conveyors %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></label>
     <label>سمت<br><select name="side"><option value="L">چپ</option><option value="R">راست</option></select></label>
-    <label>سرعت پخش<br><select name="speed"><option value="1">۱×</option><option value="2">۲×</option><option value="4">۴×</option></select></label>
     <span class="muted" id="roi-text"></span>
     <button class="primary" id="start-replay">شروع بازپخش</button>
   </form>

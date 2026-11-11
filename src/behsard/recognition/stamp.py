@@ -61,6 +61,20 @@ class Reading:
     text: str = ""  # Tesseract text ("" if not run / nothing read)
     ocr_conf: float = 0.0
     scores: dict[str, float] = field(default_factory=dict)
+    pos: tuple[float, float] = (0.5, 0.5)  # region centre, fractions of the image
+    size: float = 0.0  # character height, fraction of the image width
+
+
+@dataclass
+class Spot:
+    """One stamp candidate found in a single frame (see ``StampRecognizer.spot``)."""
+
+    code: str  # best matching active stamp
+    accepted: bool  # confident enough to credit on its own
+    confidence: float
+    pos: tuple[float, float]
+    size: float
+    result: Result
 
 
 def rotated_crop(
@@ -198,6 +212,9 @@ class StampRecognizer:
                 r = Reading(
                     image_index, ri, angle % 360, binarise(st, region.char_h), colour, region.score
                 )
+                bx, by, bw, bh = region.box
+                r.pos = ((bx + bw / 2) / img.shape[1], (by + bh / 2) / img.shape[0])
+                r.size = region.char_h / img.shape[1]
                 r.glyph_text, r.glyph_pos = self.glyphs.read(r.line)
                 if r.glyph_pos:
                     r.glyph_best = float(np.mean([max(p.values()) for p in r.glyph_pos]))
@@ -211,6 +228,29 @@ class StampRecognizer:
                     continue
                 r.text, r.ocr_conf = self._ocr_line(r.line)
         return readings
+
+    def spot(self, img: np.ndarray, active_stamps: Sequence[str]) -> list[Spot]:
+        """All stamp candidates in one frame, decided region by region.
+
+        Unlike :meth:`recognize` (one answer per carton) this returns every
+        region with a best guess, so several stamped cartons in view are all
+        reported; the caller tracks them over time.
+        """
+        active = [s.strip().upper() for s in active_stamps]
+        if not active:
+            return []
+        by_region: dict[int, list[Reading]] = {}
+        for r in self.read_image(img, 0):
+            by_region.setdefault(r.region_index, []).append(r)
+        out = []
+        for rs in by_region.values():
+            res = self.decide(rs, active)
+            if res.best_guess is None:
+                continue
+            out.append(
+                Spot(res.best_guess, res.stamp is not None, res.confidence, rs[0].pos, rs[0].size, res)
+            )
+        return out
 
     def score_reading(self, r: Reading, active: Sequence[str]) -> dict[str, float]:
         tess = match_scores([r.text], active) if r.text else {c: 0.0 for c in active}

@@ -56,6 +56,12 @@ def test_operator_flow(app_url: str, browser, synth_video: Path, tmp_path: Path)
         assert r is not None and r.status == 200, p
         assert page.locator("header").is_visible()
 
+    # this flow needs unstamped cartons in the review queue: count by seams
+    page.goto(app_url + "/advanced")
+    page.select_option("#tracking-mode", "seams")
+    page.click("#save-advanced")
+    page.wait_for_selector("text=تنظیمات ذخیره و اعمال شد")
+
     # open a shift and assign the stamps that appear in the video
     page.goto(app_url + "/shifts")
     page.fill("input[name=name]", "صبح")

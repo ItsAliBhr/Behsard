@@ -158,11 +158,13 @@ class Pipeline:
             ids = {a.code: a.stamp_id for a in active}
             shift = self.shifts.shift_at(ts)
         codes = sorted(ids)
-        res = (
-            self.recognizer.recognize(images, codes)
-            if images and codes
-            else Result(stamp=None, confidence=0.0)
-        )
+        pre = next((x.result for x in seen if isinstance(x.result, Result)), None)
+        if pre is not None:  # stamps mode: the spotter has already read it
+            res = pre
+        elif images and codes:
+            res = self.recognizer.recognize(images, codes)
+        else:
+            res = Result(stamp=None, confidence=0.0)
         stamp_id = ids.get(res.stamp) if res.stamp else None
         status = CartonStatus.RECOGNIZED if stamp_id is not None else CartonStatus.PENDING_REVIEW
         ev = CartonEvent(

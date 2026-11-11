@@ -5,6 +5,7 @@
     </h3>
     {% if test_mode.enabled %}<div class="flash err">حالت آزمایش روشن است: کارتن‌ها در شمارش کارگران حساب نمی‌شوند. <a href="/test">حالت آزمایش</a></div>{% endif %}
     {% if not shifts %}<p class="muted">شیفت بازی وجود ندارد. <a href="/shifts">شروع شیفت</a></p>{% endif %}
+    {% if cameras and not shifts and not test_mode.enabled %}<div class="flash err">هیچ فهرست مهری فعال نیست، پس دوربین‌های زنده چیزی تشخیص نمی‌دهند: یک <a href="/shifts">شیفت</a> باز کنید و مهرها را تخصیص دهید، یا <a href="/test">حالت آزمایش</a> را روشن کنید.</div>{% endif %}
     <div style="display:flex; gap:40px; margin-bottom:10px">
       <div>کل: <span class="big" id="total-count">{{ total|fa }}</span></div>
       <div>در انتظار بررسی: <a href="/review" class="big" id="pending-count" style="color:var(--warn)">{{ pending|fa }}</a></div>

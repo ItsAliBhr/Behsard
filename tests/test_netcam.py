@@ -87,6 +87,7 @@ def _shift_repo(tmp: Path, codes: list[str]) -> SqliteRepository:
 
 def _run_live(urls: dict[str, str], repo: SqliteRepository, media: Path, seconds: float) -> LiveService:
     cfg = Config()
+    cfg.tracking.mode = "seams"
     cfg.media_dir = media
     cfg.cameras = [{"id": k, "conveyor_id": 1, "side": k, "url": u} for k, u in urls.items()]
     live = LiveService(cfg, repo, StampRecognizer())

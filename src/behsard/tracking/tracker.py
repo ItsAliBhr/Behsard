@@ -66,6 +66,7 @@ class CartonSighting:
     index: int  # running number on this camera
     meta: dict[str, object] = field(default_factory=dict)
     full_frames: list[np.ndarray] = field(default_factory=list)  # uncropped, for review
+    result: object | None = None  # recognition already done (stamps mode): a Result
 
 
 @dataclass

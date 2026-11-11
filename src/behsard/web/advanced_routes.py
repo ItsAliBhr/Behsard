@@ -40,6 +40,7 @@ def _ctx(request: Request, message: str = "") -> dict[str, object]:
     exports = sorted(cfg.resolve("data/exports").glob("*.zip"), reverse=True)[:10]
     return {
         "request": request, "nav": "advanced", "rows": rows, "message": message,
+        "mode": cfg.tracking.mode,
         "learned": getattr(rec, "learned_templates", 0), "templates_path": cfg.recognition.templates_path,
         "exports": [p.name for p in exports],
     }
@@ -68,6 +69,8 @@ def _apply(request: Request) -> None:
 async def advanced_save(request: Request) -> RedirectResponse:
     form = await request.form()
     cfg = request.app.state.cfg
+    if form.get("tracking.mode") in ("stamps", "seams"):
+        cfg.tracking.mode = str(form.get("tracking.mode"))
     for sec, key, _label, lo, hi in FIELDS:
         raw = form.get(f"{sec}.{key}")
         if raw is None or str(raw).strip() == "":
@@ -88,6 +91,7 @@ async def advanced_defaults(request: Request) -> RedirectResponse:
     cfg = request.app.state.cfg
     for sec, key, *_ in FIELDS:
         setattr(getattr(cfg, sec), key, getattr(DEFAULTS[sec], key))
+    cfg.tracking.mode = DEFAULTS["tracking"].mode
     _apply(request)
     return RedirectResponse("/advanced?saved=defaults", status_code=303)
 

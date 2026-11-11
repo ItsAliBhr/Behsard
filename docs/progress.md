@@ -488,6 +488,47 @@ floor, box in the lower half of the frame, sofa/wall/laptop around it) showed
   wrongly included belt stops).
 - Regression thresholds raised: frames accuracy ≥ 0.48, top-1 ≥ 0.80.
 
+## Counting by stamps becomes the default (v0.2.2, 2026-11-11)
+
+The user reported "no output whatever I test". Reproduced through the real
+UI (Playwright, original files, default settings): **all three real videos
+gave 0 events** — the two handheld phone clips and the fixed Hikvision clip.
+The seam tracker (cartons first, then stamps) has never produced output on
+real footage, while frame-by-frame stamp reading worked on all of it.
+
+Change: new default `tracking.mode: stamps` (`tracking/spotter.py`,
+`StampSpotter`): every 0.25 s the recognizer returns all stamp candidates in
+the watch region (`StampRecognizer.spot`, per-region decisions); candidates
+are followed across reads (same code within 0.4 of the view, or any code
+within 0.12; duplicates of one stamp in one read merged; a stamp hidden ≤ 8 s
+in the same place is the same) and each track is counted once: recognized as
+soon as it has 2 confident reads or one ≥ 0.6 (emitted immediately), sent to
+review when it ends with one borderline read or ≥ 4 weak reads agreeing
+(≥ 80 % of votes, mean ≥ 0.3), dropped otherwise. An unchanged view (stopped
+belt) is not re-read. No L/R pairing is needed (a stamp is on one side).
+`seams` mode is kept and selectable on `/advanced`.
+- Replay: lossless (reader waits for the worker), on the video's clock, as
+  fast as the PC allows; the setup page asks for **the stamps in the video**
+  (required unless a shift/test mode supplies them); such events are stored as
+  `test` so they can be confirmed on the test page. Result panel on `/replay`.
+- Dashboard: live view draws each stamp candidate (green = confident) and
+  warns when no stamp list is active (no shift, test mode off).
+- Results through the UI (stamp list A12 B07 C15, full frame, no ROI):
+  | Video | before | now | truth |
+  |---|---|---|---|
+  | IMG_5796 (phone, handheld) | 0 | 6 × A12, 0 wrong | 6 stamped cartons |
+  | IMG_5797 (phone, handheld, panning) | 0 | 6 × A12, 0 wrong | ~5–6 stamped cartons/crates in view (camera pans, exact count unclear) |
+  | Fixed Hikvision clip (one box moved by hand) | 0 | 4 × A12, 0 wrong | 3 appearances (4th: box moved while a hand covered the stamp) |
+  With the 12-code list incl. look-alikes (A17, B12, K12, R12) IMG_5796 still
+  gives only A12 (test `test_real_phone_video_gives_stamp_events`).
+- Limits: cartons without a readable stamp give no event in this mode;
+  handheld clips can be ±1–2 (camera motion splits/merges tracks); reading
+  costs ~0.4–0.6 s per changed frame, so live cameras read as often as the
+  CPU allows (frames in between are skipped).
+- Tests: `tests/test_spotter.py` (scripted tracks, synthetic two cameras,
+  real phone video); seam-mode tests set `mode="seams"` explicitly.
+- Offline CLI `process-video` still uses the seam tracker.
+
 ## Decisions
 
 - **Timestamps** are naive local site time stored as ISO strings. Single site,
@@ -522,7 +563,10 @@ floor, box in the lower half of the frame, sofa/wall/laptop around it) showed
 - `OMP_THREAD_LIMIT=1` for Tesseract (otherwise parallel workers thrash).
 - Accept threshold 0.45 chosen from sweeps: keeps error ≤ 3% on synthetic dev
   and 0% on real frames. Wrong credits are worse than manual reviews.
-- **Counting by seams in conveyor coordinates**, not by photo-eye or frame
+- **Default counting = stamp tracks, not carton seams** (2026-11-11): real
+  footage showed seams are not reliably visible but stamps are; the goal is
+  cartons per worker, and only stamped cartons can be credited anyway.
+- **Counting by seams in conveyor coordinates** (now the optional `seams` mode), not by photo-eye or frame
   counting: cartons touch and stop, so only travelled distance + seam
   crossings are reliable. Carton width limits assume one carton is 25–160% of
   the view (40–50 cm carton in a ~1 m field of view at 45 cm).

@@ -43,6 +43,11 @@ class TrackingConfig:
     min_carton_frac: float = 0.25
     max_carton_frac: float = 1.6
     store_max_side: int = 0  # 0 = keep full-resolution frames for recognition
+    # how cartons are counted: "stamps" = follow each stamp seen (default,
+    # works on real footage), "seams" = find carton seams with a fixed camera
+    mode: str = "stamps"
+    spot_interval_s: float = 0.25  # stamps mode: time between reads
+    spot_gap_s: float = 2.0  # stamps mode: a stamp unseen this long has left
 
 
 @dataclass

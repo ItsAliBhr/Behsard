@@ -7,6 +7,11 @@
   <h2 style="margin-top:0">آستانه‌های تشخیص و ردیابی</h2>
   <p class="muted">فقط برای تنظیم در محل. تغییرات ردیابی دوربین‌ها را دوباره راه‌اندازی می‌کند.</p>
   <form method="post" action="/advanced/save">
+    <p><b>روش شمارش کارتن:</b>
+      <select name="tracking.mode" id="tracking-mode">
+        <option value="stamps" {{ 'selected' if mode == 'stamps' }}>بر اساس مهر (پیش‌فرض): هر مهرِ دیده‌شده دنبال و یک بار شمرده می‌شود</option>
+        <option value="seams" {{ 'selected' if mode == 'seams' }}>بر اساس درز کارتن‌ها: فقط با دوربین کاملاً ثابت و روبه‌رو؛ کارتن بدون مهر را هم می‌شمارد</option>
+      </select></p>
     <table>
       <tr><th>تنظیم</th><th>مقدار</th><th>پیش‌فرض</th></tr>
       {% for r in rows %}

@@ -77,6 +77,7 @@ def test_live_counts_and_latency(video: Path, tmp_path: Path) -> None:
     truth = json.loads((video / "truth.json").read_text())
     repo = _repo(tmp_path / "db.sqlite", truth["codes"])
     cfg = Config()
+    cfg.tracking.mode = "seams"
     cfg.media_dir = tmp_path / "media"
     cfg.cameras = [
         {"id": "L", "conveyor_id": 1, "side": "L", "url": str(video / "left.mp4"), "loop": False},

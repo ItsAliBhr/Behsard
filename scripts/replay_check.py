@@ -48,12 +48,17 @@ def main() -> int:
         time.sleep(2)
     time.sleep(8)  # let the last cartons be released and recognised
     events = [e for e in get_json(f"{base}/api/events?after={last}&limit=100000") if e["mode"] == "replay"]  # type: ignore[union-attr]
-    got = len(events)
-    wrong = sum(1 for e, c in zip(events, complete) if e["stamp"] and e["stamp"] != c["stamp"])
-    credited = sum(1 for e in events if e["stamp"])
-    print(f"cartons expected={len(complete)} got={got} credited={credited} wrong={wrong}")
+    # stamps mode (default): the left camera reports the stamps on the left
+    # side; each at most once, never a wrong code
+    from collections import Counter
+
+    expected = Counter(c["stamp"] for c in complete if c["stamp"] and c["side"] == "L")
+    credited = Counter(e["stamp"] for e in events if e["stamp"])
+    wrong = sum(n for k, n in credited.items() if k not in expected)
+    extra = sum(max(0, n - expected.get(k, 0)) for k, n in credited.items())
+    print(f"left-side stamps expected={dict(expected)} credited={dict(credited)} events={len(events)} wrong={wrong} extra={extra}")
     print(json.dumps(events, ensure_ascii=False)[:2000])
-    ok = got == len(complete) and wrong == 0 and credited >= 1
+    ok = wrong == 0 and extra == 0 and sum(credited.values()) >= 1
     print("REPLAY CHECK", "OK" if ok else "FAILED")
     return 0 if ok else 1
 

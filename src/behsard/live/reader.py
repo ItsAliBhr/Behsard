@@ -19,7 +19,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import cv2
@@ -96,6 +96,7 @@ class CameraReader(threading.Thread):
         realtime: bool = True,
         backoff_max: float = 3.0,
         speed: float = 1.0,
+        video_clock: bool = False,
     ) -> None:
         super().__init__(name=f"reader-{camera_id}", daemon=True)
         self.camera_id = camera_id
@@ -106,6 +107,9 @@ class CameraReader(threading.Thread):
         self.realtime = realtime
         self.backoff_max = backoff_max
         self.speed = max(0.1, speed)  # file playback speed (tests / fast replay)
+        # replay: timestamps follow the video (frame index / fps), not the
+        # wall clock, so results do not depend on how fast this PC is
+        self.video_clock = video_clock
         self.health = CameraHealth()
         self.latest: np.ndarray | None = None  # last frame read (for snapshots)
         self._stop_event = threading.Event()
@@ -162,6 +166,7 @@ class CameraReader(threading.Thread):
         period = 1.0 / (self.process_fps * (self.speed if file_src else 1.0)) if self.process_fps > 0 else 0.0
         next_due = 0.0
         t_start = time.monotonic()
+        t_wall = datetime.now()
         n = 0
         while not self._stop_event.is_set():
             if file_src and self.realtime:  # pace a file like a live camera
@@ -195,7 +200,8 @@ class CameraReader(threading.Thread):
             self.health._win_out.append(now)
             self.health.fps_out = _rate(self.health._win_out, now)
             try:
-                self.on_frame(frame, datetime.now())
+                ts = t_wall + timedelta(seconds=(n - 1) / src_fps) if self.video_clock else datetime.now()
+                self.on_frame(frame, ts)
             except Exception:  # never let a processing bug kill the reader
                 log.exception("camera %s: frame handler failed", self.camera_id)
         return False

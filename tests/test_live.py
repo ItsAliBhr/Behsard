@@ -76,6 +76,7 @@ def test_live_service_end_to_end(video: Path, tmp_path: Path) -> None:
     for i, c in enumerate(sorted(set(truth["codes"]) | {"A12"})):
         svc.assign(sh.id, svc.ensure_worker(f"w{i}").id, c, 1)
     cfg = Config()
+    cfg.tracking.mode = "seams"
     cfg.media_dir = tmp_path / "media"
     cfg.cameras = [
         {"id": "L", "conveyor_id": 1, "side": "L", "url": str(video / "left.mp4"), "loop": False, "speed": 3},
@@ -102,6 +103,7 @@ def test_test_mode_events_do_not_count(video: Path, tmp_path: Path) -> None:
     repo = SqliteRepository(":memory:")
     repo.upsert_conveyor(Conveyor(1, "c1"))
     cfg = Config()
+    cfg.tracking.mode = "seams"
     cfg.media_dir = tmp_path / "m"
     cfg.cameras = [{"id": "L", "conveyor_id": 1, "side": "L", "url": str(video / "left.mp4"), "loop": False, "speed": 3}]
     live = LiveService(cfg, repo, StampRecognizer())
@@ -147,12 +149,24 @@ def test_replay_setup_flow_with_roi(video: Path, tmp_path: Path) -> None:
     assert r.status_code == 303 and "/replay/setup" in r.headers["location"]
     page = c.get(r.headers["location"]).text
     assert "roi-canvas" in page and page.count("snapshots/replay_") >= 4
-    c.post("/replay/start", data={"path": str(video / "left.mp4"), "x": "0.1", "y": "0.2", "w": "0.8", "h": "0.6", "speed": "4"})
+    # no stamp list and no open shift -> back to the setup page asking for it
+    r = c.post("/replay/start", data={"path": str(video / "left.mp4")}, follow_redirects=False)
+    assert "need_stamps=1" in r.headers["location"]
+    truth = json.loads((video / "truth.json").read_text())
+    c.post("/replay/start", data={"path": str(video / "left.mp4"), "x": "0.1", "y": "0.2", "w": "0.8", "h": "0.6",
+                                  "stamps": " ".join(truth["codes"])})
     live = app.state.live
     try:
         assert live.cameras["replay"].cfg["roi"] == [0.1, 0.2, 0.8, 0.6]
-        assert _wait(lambda: live.cameras["replay"].reader.health.state == "finished", 60)
+        assert live.cameras["replay"].worker.spotter is not None  # stamps mode by default
+        assert _wait(lambda: live.cameras["replay"].reader.health.state == "finished", 120)
     finally:
         live.stop()
     html = c.get("/replay").text
-    assert "کارتن‌های ردیابی‌شده" in html
+    assert "کارتن‌های مهردار پیداشده" in html
+    # the left camera sees the stamps on the left side only; none may be wrong
+    left = [c_["stamp"] for c_ in truth["cartons"] if c_["stamp"] and c_["side"] == "L"]
+    evs = repo.list_carton_events()
+    read = [e.meta["stamp_code"] for e in evs if e.meta["stamp_code"]]
+    assert all(e.mode == "test" for e in evs)
+    assert read and all(code in left for code in read) and len(read) <= len(left)
