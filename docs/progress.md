@@ -528,6 +528,10 @@ belt) is not re-read. No L/R pairing is needed (a stamp is on one side).
 - Tests: `tests/test_spotter.py` (scripted tracks, synthetic two cameras,
   real phone video); seam-mode tests set `mode="seams"` explicitly.
 - Offline CLI `process-video` still uses the seam tracker.
+- Load in stamps mode (2 simulated cameras 3200×1800, 3 min, 4-core
+  container): CPU ≈ 51 % of the machine (seams mode: ≈ 38 %), RSS ≈ 0.8 GB.
+- Released as **v0.2.2** (CI green: tests on Ubuntu, Windows build +
+  clean-runner acceptance).
 
 ## Decisions
 
