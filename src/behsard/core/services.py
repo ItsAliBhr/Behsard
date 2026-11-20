@@ -10,7 +10,7 @@ from behsard.config import Config
 from behsard.core.models import Camera, Conveyor, Shift, ShiftAssignment, Stamp, Worker
 from behsard.core.repository import Repository
 
-STAMP_CODE_RE = re.compile(r"^[A-Z][0-9]{2}$")
+STAMP_CODE_RE = re.compile(r"^[A-Z][0-9]{1,2}$")  # A12, or A5 (single-digit stamps)
 
 
 class DomainError(ValueError):
@@ -20,7 +20,7 @@ class DomainError(ValueError):
 def normalize_stamp_code(code: str) -> str:
     c = code.strip().upper()
     if not STAMP_CODE_RE.match(c):
-        raise DomainError(f"invalid stamp code {code!r}: expected letter + 2 digits")
+        raise DomainError(f"invalid stamp code {code!r}: expected a letter and 1-2 digits, e.g. A12 or A5")
     return c
 
 

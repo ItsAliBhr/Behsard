@@ -281,16 +281,13 @@ class GlyphScorer:
             return {c: 0.0 for c in alphabet}
         return {c: float((self.tmpl[c] @ v).max()) for c in alphabet}
 
-    def read(self, line_bw: np.ndarray) -> tuple[str, list[dict[str, float]]]:
-        """Per-position char scores and the best unconstrained reading."""
-        glyphs = segment_line(line_bw, 3)
-        if len(glyphs) != 3:
+    def read(self, line_bw: np.ndarray, n: int = 3) -> tuple[str, list[dict[str, float]]]:
+        """Per-position char scores and the best unconstrained reading of an
+        ``n``-character code (letter + ``n - 1`` digits)."""
+        glyphs = segment_line(line_bw, n)
+        if len(glyphs) != n:
             return "", []
-        pos = [
-            self.char_scores(glyphs[0], LETTERS),
-            self.char_scores(glyphs[1], DIGITS),
-            self.char_scores(glyphs[2], DIGITS),
-        ]
+        pos = [self.char_scores(glyphs[0], LETTERS)] + [self.char_scores(g, DIGITS) for g in glyphs[1:]]
         text = "".join(max(p, key=p.__getitem__) for p in pos)
         return text, pos
 
@@ -312,11 +309,16 @@ class GlyphScorer:
         return out
 
     @staticmethod
-    def code_scores(pos: list[dict[str, float]], active: Sequence[str]) -> dict[str, float]:
+    def code_scores(
+        pos: list[dict[str, float]], active: Sequence[str], pos2: list[dict[str, float]] | None = None
+    ) -> dict[str, float]:
+        """Mean per-position score of each code; ``pos2`` is the two-glyph
+        reading used for single-digit codes (A5)."""
         out = {}
         for code in active:
-            if len(pos) != 3 or len(code) != 3:
+            p = pos2 if len(code) == 2 and pos2 is not None else pos
+            if len(p) != len(code):
                 out[code] = 0.0
                 continue
-            out[code] = float(np.mean([pos[i].get(code[i], 0.0) for i in range(3)]))
+            out[code] = float(np.mean([p[i].get(code[i], 0.0) for i in range(len(code))]))
         return out

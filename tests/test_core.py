@@ -12,8 +12,11 @@ from behsard.core.services import DomainError, ShiftService, normalize_stamp_cod
 
 def test_normalize_stamp_code() -> None:
     assert normalize_stamp_code(" a12 ") == "A12"
+    assert normalize_stamp_code("a5") == "A5"  # single-digit stamps exist in the workshop
     with pytest.raises(DomainError):
-        normalize_stamp_code("A1")
+        normalize_stamp_code("A123")
+    with pytest.raises(DomainError):
+        normalize_stamp_code("A")
     with pytest.raises(DomainError):
         normalize_stamp_code("12A")
 

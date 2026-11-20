@@ -101,3 +101,12 @@ def test_real_fixture_images_read_as_a12(rec: StampRecognizer) -> None:
         assert r.best_guess == "A12", s.name
         assert r.stamp in ("A12", None), s.name  # never a wrong worker
         assert r.crop is not None
+
+
+def test_single_digit_codes_match() -> None:
+    from behsard.recognition.match import match_scores
+
+    s = match_scores(["A5"], ["A5", "A15", "B5"])
+    assert s["A5"] == max(s.values()) and s["A5"] > s["A15"]
+    s = match_scores(["A15"], ["A1", "A15"])
+    assert s["A15"] > s["A1"]

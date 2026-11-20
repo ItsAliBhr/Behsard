@@ -23,6 +23,10 @@
     <label><b>مهرهای موجود در ویدیو</b> (با فاصله)<br><input name="stamps" id="replay-stamps" class="ltr" size="28" value="{{ stamps }}" placeholder="A12 B07 C15" required></label>
     <label>نقاله<br><select name="conveyor_id">{% for c in conveyors %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></label>
     <label>سمت<br><select name="side"><option value="L">چپ</option><option value="R">راست</option></select></label>
+    <label>روش پخش<br><select name="pace">
+      <option value="realtime">مثل دوربین زنده (سرعت عادی)</option>
+      <option value="all">همه فریم‌ها (کندتر، برای آزمایش دقیق)</option>
+    </select></label>
     <span class="muted" id="roi-text"></span>
     <button class="primary" id="start-replay">شروع بازپخش</button>
   </form>

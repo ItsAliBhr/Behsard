@@ -279,6 +279,7 @@ async def replay_start(
     w: str = Form(""),
     h: str = Form(""),
     stamps: str = Form(""),
+    pace: str = Form("realtime"),
 ) -> RedirectResponse:
     live = request.app.state.live
     if upload is not None and upload.filename:
@@ -301,6 +302,7 @@ async def replay_start(
     cam: dict[str, Any] = {
         "id": REPLAY_ID, "url": str(video), "conveyor_id": conveyor_id, "side": side.upper()[:1] or "L",
         "loop": False, "speed": max(0.25, min(speed, 8.0)),
+        "realtime": pace != "all",
     }
     if codes:
         cam["stamps"] = codes

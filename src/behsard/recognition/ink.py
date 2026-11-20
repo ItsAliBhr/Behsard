@@ -100,6 +100,23 @@ class _Comp:
     cy: float
     strength: float
     blue: float = 0.0  # fraction of pixels with a blue hue (stamp ink cue)
+    area: int = 0
+
+
+def blue_ink_map(img: np.ndarray, min_s: int = 60, min_v: int = 40) -> tuple[np.ndarray, np.ndarray]:
+    """Strictly blue pixels (stamp ink on white or printed cartons).
+
+    Returns (mask, strength) like :func:`ink_map`, but strength comes from
+    saturation only, so red/black print next to the stamp stays out of the
+    binarised letters.
+    """
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    blue = (h >= 95) & (h <= 135) & (s >= min_s) & (v >= min_v)
+    mask = cv2.morphologyEx(blue.astype(np.uint8) * 255, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8))
+    mask = remove_long_lines(mask)
+    strength = np.where(mask > 0, s.astype(np.float32) * 0.6, 0.0).astype(np.float32)
+    return mask, strength
 
 
 def blue_hue_map(img: np.ndarray, min_s: int = 30, min_v: int = 25) -> np.ndarray:
@@ -115,7 +132,7 @@ def blue_hue_map(img: np.ndarray, min_s: int = 30, min_v: int = 25) -> np.ndarra
 
 def _components(
     mask: np.ndarray, strength: np.ndarray, min_char: int, max_char: float,
-    blue: np.ndarray | None = None,
+    blue: np.ndarray | None = None, min_thick_frac: float = 0.0,
 ) -> tuple[list[_Comp], np.ndarray]:
     m = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
     n, labels, stats, cents = cv2.connectedComponentsWithStats(m, connectivity=8)
@@ -123,7 +140,9 @@ def _components(
     for i in range(1, n):
         x, y, cw, ch, area = (int(v) for v in stats[i])
         size = max(cw, ch)
-        if size < min_char or size > max_char or min(cw, ch) < 2:
+        # hairlines (carton edges, print rules) are not characters; even a
+        # thin "1" is wider than ~8 % of its height
+        if size < min_char or size > max_char or min(cw, ch) < max(2.0, min_thick_frac * size):
             continue
         fill = area / float(cw * ch)
         if fill > 0.85 and min(cw, ch) > 6:  # solid blob (belt, print block)
@@ -133,7 +152,7 @@ def _components(
         roi = labels[y : y + ch, x : x + cw] == i
         st = float(strength[y : y + ch, x : x + cw][roi].mean())
         bl = float(blue[y : y + ch, x : x + cw][roi].mean()) if blue is not None else 0.0
-        comps.append(_Comp(i, x, y, cw, ch, float(size), float(cents[i][0]), float(cents[i][1]), st, bl))
+        comps.append(_Comp(i, x, y, cw, ch, float(size), float(cents[i][0]), float(cents[i][1]), st, bl, area))
     return comps, labels
 
 
@@ -162,6 +181,8 @@ def propose_regions(
     min_char: int = 8,
     max_char_frac: float = 0.45,
     blue: np.ndarray | None = None,
+    isolate: bool = False,
+    strict: bool = False,
 ) -> list[Region]:
     """Propose stamp candidates from character-sized ink components.
 
@@ -169,9 +190,15 @@ def propose_regions(
     similar-sized, evenly spaced components. Pairs (two characters merged or
     one missing) and elongated single components (all merged) are kept as
     lower-ranked fallbacks.
+
+    ``strict`` (for the clean strict-blue mask): drop hairlines and pair a
+    merged two-character blob with its neighbour by matching stroke height.
+    ``isolate``: rank candidates surrounded by little other ink higher.
     """
     h, w = mask.shape
-    comps, labels = _components(mask, strength, min_char, max_char_frac * min(h, w), blue)
+    comps, labels = _components(
+        mask, strength, min_char, max_char_frac * min(h, w), blue, min_thick_frac=0.08 if strict else 0.0
+    )
     if not comps:
         return []
     n = len(comps)
@@ -180,7 +207,12 @@ def propose_regions(
     sz = np.array([c.size for c in comps])
     dist = np.hypot(cx[:, None] - cx[None, :], cy[:, None] - cy[None, :])
     big = np.maximum(sz[:, None], sz[None, :])
-    ratio = big / np.minimum(sz[:, None], sz[None, :])
+    ratio_long = big / np.minimum(sz[:, None], sz[None, :])
+    # merged neighbours ("A2" + "4") differ in length but keep the same
+    # height: similar if either the long or the short sides match
+    th = np.array([min(c.w, c.h) for c in comps], dtype=float)
+    ratio_short = np.maximum(th[:, None], th[None, :]) / np.minimum(th[:, None], th[None, :])
+    ratio = np.minimum(ratio_long, ratio_short) if strict else ratio_long
     near = (dist <= 1.5 * big) & (dist >= 0.3 * big) & (ratio <= 1.9)
     np.fill_diagonal(near, False)
 
@@ -250,6 +282,23 @@ def propose_regions(
         if thickness < min_char:
             continue
         cands[(i,)] = 0.3 * ink_factor([c]) * min(1.0, thickness / 14.0)
+    if isolate and cands:
+        # a stamp sits alone on the carton face; belt mesh, clothing and
+        # print are surrounded by more ink of the same kind
+        ii = cv2.integral((mask > 0).astype(np.uint8))
+        for key in list(cands):
+            cs = [comps[i] for i in key]
+            x0 = min(c.x for c in cs)
+            y0 = min(c.y for c in cs)
+            x1 = max(c.x + c.w for c in cs)
+            y1 = max(c.y + c.h for c in cs)
+            m = 0.5 * max(x1 - x0, y1 - y0)
+            ax0, ay0 = max(0, int(x0 - m)), max(0, int(y0 - m))
+            ax1, ay1 = min(w, int(x1 + m)), min(h, int(y1 + m))
+            around = float(ii[ay1, ax1] - ii[ay0, ax1] - ii[ay1, ax0] + ii[ay0, ax0])
+            own = float(sum(c.area for c in cs))
+            iso = min(1.0, own / max(1.0, around))
+            cands[key] *= 0.2 + 0.8 * iso ** 2
     ranked = sorted(cands.items(), key=lambda kv: kv[1], reverse=True)
     regions: list[Region] = []
     used_boxes: list[tuple[int, int, int, int]] = []

@@ -27,6 +27,7 @@ class RecognitionConfig:
     # rank blue-hued candidates higher; helps when only carton faces are in the
     # watch region, hurts when a blue belt is in view -> off by default
     blue_boost: bool = False
+    blue_regions: int = 6  # candidates from the strict blue-ink mask (tried first)
     work_max_side: int = 1600
     templates_path: str = "data/templates/learned.npz"  # learned from real crops
 

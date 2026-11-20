@@ -115,7 +115,7 @@ async def live_jpeg(request: Request, camera_id: str) -> Response:
     if lc is None:
         return Response(status_code=404)
     width = request.app.state.cfg.live.preview_width
-    data = await asyncio.to_thread(lc.worker.render, width)
+    data = await asyncio.to_thread(lc.worker.render, width, lc.reader.latest)
     if data is None:
         return Response(status_code=204)
     return Response(data, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
@@ -136,7 +136,7 @@ async def live_mjpeg(request: Request, camera_id: str, fps: float = 4.0) -> Resp
             lc = live.cameras.get(camera_id)
             if lc is None:
                 break
-            data = await asyncio.to_thread(lc.worker.render, width)
+            data = await asyncio.to_thread(lc.worker.render, width, lc.reader.latest)
             if data:
                 yield (
                     f"--{BOUNDARY}\r\nContent-Type: image/jpeg\r\nContent-Length: {len(data)}\r\n\r\n"

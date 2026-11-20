@@ -53,6 +53,7 @@ class SynthConfig:
     n_active_min: int = 12
     n_active_max: int = 16
     p_confusers: float = 0.6  # add near-miss codes to the active set
+    p_short: float = 0.0  # single-digit codes (A5); 0 keeps older datasets identical
     p_belt: float = 0.3  # blue conveyor belt strip (distractor)
     p_partial: float = 0.12
     p_faint: float = 0.25
@@ -60,7 +61,9 @@ class SynthConfig:
     jpeg: bool = True
 
 
-def random_code(rng: np.random.Generator) -> str:
+def random_code(rng: np.random.Generator, p_short: float = 0.0) -> str:
+    if p_short > 0 and rng.random() < p_short:
+        return f"{LETTERS[rng.integers(26)]}{rng.integers(10)}"
     return f"{LETTERS[rng.integers(26)]}{rng.integers(100):02d}"
 
 
@@ -68,7 +71,7 @@ def confusers(code: str, rng: np.random.Generator, n: int) -> list[str]:
     """Near-miss codes: one character changed."""
     out: set[str] = set()
     while len(out) < n:
-        pos = int(rng.integers(3))
+        pos = int(rng.integers(len(code)))
         chars = list(code)
         chars[pos] = LETTERS[rng.integers(26)] if pos == 0 else str(rng.integers(10))
         c = "".join(chars)
@@ -84,8 +87,10 @@ def active_set(rng: np.random.Generator, cfg: SynthConfig, true_code: str | None
         codes.add(true_code)
         if rng.random() < cfg.p_confusers:
             codes.update(confusers(true_code, rng, int(rng.integers(1, 4))))
+        if len(true_code) == 2 and rng.random() < cfg.p_confusers:
+            codes.add(true_code + str(rng.integers(10)))  # A5 next to A51
     while len(codes) < n:
-        codes.add(random_code(rng))
+        codes.add(random_code(rng, cfg.p_short))
     return sorted(codes)
 
 
@@ -339,7 +344,7 @@ def generate_sample(
     img = make_background(rng, kind, h, w)
     belt_h = add_belt_and_seam(rng, img, cfg)
     negative = rng.random() < cfg.p_negative
-    code = None if negative else random_code(rng)
+    code = None if negative else random_code(rng, cfg.p_short)
     meta: dict[str, Any] = {"background": kind}
     if code is not None:
         text_h = int(rng.integers(cfg.min_text_h, cfg.max_text_h + 1))

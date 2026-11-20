@@ -181,14 +181,17 @@ class LiveService:
             )
         worker = CameraWorker(
             cid, str(cam.get("side", "L")).upper(), int(cam.get("conveyor_id", 1)),
-            tracker_params(self.cfg, cam), self._on_sighting, spotter=spotter, lossless=replay,
+            tracker_params(self.cfg, cam), self._on_sighting, spotter=spotter,
+            # replay "every frame": nothing dropped, runs as fast as this PC can
+            lossless=replay and not bool(cam.get("realtime", False)),
         )
         url = camera_url(cam)
         reader = CameraReader(
             cid, url, worker.submit,
             process_fps=float(cam.get("process_fps", self.cfg.tracking.process_fps)),
             loop=bool(cam.get("loop", not replay)),
-            # replay: every frame, as fast as this PC can, on the video's clock
+            # replay: like a live camera ("realtime") or every frame, on the
+            # video's clock either way
             realtime=bool(cam.get("realtime", not replay)),
             speed=float(cam.get("speed", 1.0)),
             video_clock=replay,

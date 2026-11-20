@@ -141,9 +141,14 @@ class CameraWorker(threading.Thread):
         self._flush()
 
     # ---- live view -----------------------------------------------------
-    def render(self, width: int = 960) -> bytes | None:
-        """Annotated JPEG of the latest frame (ROI, line, edges, last carton)."""
-        frame = self.latest_frame
+    def render(self, width: int = 960, frame: np.ndarray | None = None) -> bytes | None:
+        """Annotated JPEG (ROI, line, edges, stamps, last carton).
+
+        ``frame``: the newest camera frame, so the preview runs at camera
+        speed even while a slow read is in progress (the marks are from the
+        latest read); default is the last processed frame.
+        """
+        frame = frame if frame is not None else self.latest_frame
         if frame is None:
             return None
         h, w = frame.shape[:2]

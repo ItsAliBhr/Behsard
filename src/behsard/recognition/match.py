@@ -67,33 +67,37 @@ def clean(text: str) -> str:
 
 
 def coerce(s: str) -> str:
-    """Coerce a 3-char string to letter+digit+digit using confusion maps."""
-    if len(s) != 3:
+    """Coerce a 2-3 char string to letter+digit(s) using confusion maps."""
+    if len(s) not in (2, 3):
         return s
     first = _TO_LETTER.get(s[0], s[0])
     rest = "".join(_TO_DIGIT.get(c, c) for c in s[1:])
     return first + rest
 
 
-def candidates(text: str) -> list[str]:
-    """Strings worth matching from one OCR line: the whole and 3-windows."""
+def candidates(text: str, n: int = 3) -> list[str]:
+    """Strings worth matching from one OCR line: the whole and n-windows."""
     s = clean(text)
     out = {s} if s else set()
-    if len(s) > 3:
-        out.update(s[i : i + 3] for i in range(len(s) - 2))
-    out.update({coerce(c) for c in list(out) if len(c) == 3})
+    if len(s) > n:
+        out.update(s[i : i + n] for i in range(len(s) - n + 1))
+    out.update({coerce(c) for c in list(out) if len(c) in (2, 3)})
     return sorted(out)
 
 
 def similarity(text: str, code: str) -> float:
     """0..1 similarity between an OCR line and a stamp code."""
     best = 0.0
-    for c in candidates(text):
+    whole = clean(text)
+    n = len(code)
+    for c in candidates(text, n):
         d = weighted_distance(c, code)
         # penalise length mismatch less than wrong characters
-        sim = max(0.0, 1.0 - d / max(len(code), 1))
-        if c != clean(text) and len(clean(text)) > 3:
-            sim *= 0.92  # extracted from a longer noisy line
+        sim = max(0.0, 1.0 - d / max(n, 1))
+        if c != whole and len(whole) > n:
+            # extracted from a longer noisy line; a short code inside a
+            # longer reading ("A1" in "A15") is the usual confusion
+            sim *= 0.92 if n >= 3 else 0.85
         best = max(best, sim)
     return best
 

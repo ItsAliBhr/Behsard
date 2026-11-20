@@ -29,7 +29,7 @@ import pytesseract
 from behsard.config import RecognitionConfig
 from behsard.recognition.base import Result
 from behsard.recognition.glyphs import GlyphScorer
-from behsard.recognition.ink import InkParams, Region, blue_hue_map, ink_map, propose_regions
+from behsard.recognition.ink import InkParams, Region, _iou, blue_hue_map, blue_ink_map, ink_map, propose_regions
 from behsard.recognition.match import clean, match_scores
 from behsard.recognition.registry import register
 
@@ -57,12 +57,14 @@ class Reading:
     region_score: float
     glyph_text: str = ""
     glyph_pos: list[dict[str, float]] = field(default_factory=list)
+    glyph_pos2: list[dict[str, float]] | None = None  # two-glyph reading (single-digit codes)
     glyph_best: float = 0.0
     text: str = ""  # Tesseract text ("" if not run / nothing read)
     ocr_conf: float = 0.0
     scores: dict[str, float] = field(default_factory=dict)
     pos: tuple[float, float] = (0.5, 0.5)  # region centre, fractions of the image
     size: float = 0.0  # character height, fraction of the image width
+    box: tuple[int, int, int, int] = (0, 0, 0, 0)  # region box in the work image
 
 
 @dataclass
@@ -152,6 +154,8 @@ class StampRecognizer:
         self.tess_min_glyph = tess_min_glyph
         self.ink = ink or InkParams()
         self.tesseract_top_k = tesseract_top_k
+        self.spot_tess_k = 2
+        self._short_codes = False  # any single-digit code (A5) among the active ones
         self.use_tesseract = use_tesseract
         self.use_glyphs = use_glyphs
         wt, wg, ww = weights
@@ -182,12 +186,22 @@ class StampRecognizer:
         carrying the stamp is reached early.
         """
         active = [s.strip().upper() for s in active_stamps]
+        self._short_codes = any(len(c) == 2 for c in active)
         readings: list[Reading] = []
         result = Result(stamp=None, confidence=0.0)
         t0 = time.perf_counter()
         for i, img in enumerate(images):
-            readings.extend(self.read_image(img, i))
+            # general ink first (as tuned on kraft cartons); the strict
+            # blue-ink candidates only when that did not settle it, so blue
+            # clutter cannot spoil a clear read
+            ink_reads = self.read_image(img, i, source="ink")
+            readings.extend(ink_reads)
             result = self.decide(readings, active)
+            if result.stamp is None:
+                readings.extend(self.read_image(img, i, source="blue", skip=[r.box for r in ink_reads]))
+                both = self.decide_best(readings, active)
+                if both.stamp is not None:
+                    result = both
             if result.stamp is not None and result.confidence >= self.early_accept and i + 1 < len(images):
                 break
             # live latency guard: decide with what has been read so far
@@ -196,17 +210,44 @@ class StampRecognizer:
         return result
 
     # ---- steps ---------------------------------------------------------
-    def read_image(self, img: np.ndarray, image_index: int = 0) -> list[Reading]:
+    def read_image(
+        self, img: np.ndarray, image_index: int = 0, source: str = "all",
+        skip: Sequence[tuple[int, int, int, int]] = (),
+        tess_k: int | None = None,
+    ) -> list[Reading]:
+        """Read every candidate region. ``source``: "all", "blue" (strict
+        blue-ink candidates) or "ink" (general ink map); regions overlapping
+        a box in ``skip`` (already read) are left out."""
         img = self._resize(img)
-        mask, strength = ink_map(img, self.ink)
-        regions = propose_regions(
-            mask, strength, max_regions=self.cfg.max_regions,
-            blue=blue_hue_map(img) if self.cfg.blue_boost else None,
-        )
+        # 1) strictly blue ink: stamps on white/printed cartons, where the
+        #    general ink map below also marks print, people and machinery
+        cands: list[tuple[Region, np.ndarray]] = []
+        seen = list(skip)
+        bmask, bstrength = blue_ink_map(img) if source != "ink" else (None, None)
+        #    ranked two ways (isolated ink first, then plain ink score) so
+        #    belt mesh or blue clothing cannot take every slot
+        for iso in (True, False) if bmask is not None and self.cfg.blue_regions > 0 else ():
+            for r in propose_regions(
+                bmask, bstrength, max_regions=self.cfg.blue_regions, isolate=iso, strict=True
+            ):
+                if not any(_iou(r.box, b) > 0.5 for b in seen):
+                    cands.append((r, bstrength))
+                    seen.append(r.box)
+        # 2) general ink (darker + less yellow than the carton): navy/grey
+        #    looking ink on kraft
+        if source != "blue":
+            mask, strength = ink_map(img, self.ink)
+            for r in propose_regions(
+                mask, strength, max_regions=self.cfg.max_regions,
+                blue=blue_hue_map(img) if self.cfg.blue_boost else None,
+            ):
+                if not any(_iou(r.box, b) > 0.5 for b in seen):
+                    cands.append((r, strength))
+                    seen.append(r.box)
         readings: list[Reading] = []
-        for ri, region in enumerate(regions):
+        for ri, (region, smap) in enumerate(cands):
             for angle in base_angles(region):
-                colour, st = rotated_crop(img, strength, region, angle, margin=0.35)
+                colour, st = rotated_crop(img, smap, region, angle, margin=0.35)
                 if st.size == 0 or min(st.shape) < 4:
                     continue
                 r = Reading(
@@ -215,15 +256,23 @@ class StampRecognizer:
                 bx, by, bw, bh = region.box
                 r.pos = ((bx + bw / 2) / img.shape[1], (by + bh / 2) / img.shape[0])
                 r.size = region.char_h / img.shape[1]
+                r.box = region.box
                 r.glyph_text, r.glyph_pos = self.glyphs.read(r.line)
                 if r.glyph_pos:
                     r.glyph_best = float(np.mean([max(p.values()) for p in r.glyph_pos]))
+                if self._short_codes:
+                    t2, r.glyph_pos2 = self.glyphs.read(r.line, 2)
+                    if r.glyph_pos2:
+                        b2 = float(np.mean([max(p.values()) for p in r.glyph_pos2]))
+                        if b2 > r.glyph_best:
+                            r.glyph_best, r.glyph_text = b2, t2
                 readings.append(r)
         if self.use_tesseract and readings:
             order = sorted(
                 readings, key=lambda r: (r.glyph_best, r.region_score), reverse=True
             )
-            for r in order[: self.tesseract_top_k] if self.use_glyphs else order:
+            k = self.tesseract_top_k if tess_k is None else tess_k
+            for r in order[:k] if self.use_glyphs else order:
                 if self.use_glyphs and r.glyph_best < self.tess_min_glyph:
                     continue
                 r.text, r.ocr_conf = self._ocr_line(r.line)
@@ -239,8 +288,11 @@ class StampRecognizer:
         active = [s.strip().upper() for s in active_stamps]
         if not active:
             return []
+        self._short_codes = any(len(c) == 2 for c in active)
         by_region: dict[int, list[Reading]] = {}
-        for r in self.read_image(img, 0):
+        # live: fewer Tesseract runs (each is a process start, ~0.1-0.3 s);
+        # the spotter needs two agreeing reads anyway
+        for r in self.read_image(img, 0, tess_k=self.spot_tess_k):
             by_region.setdefault(r.region_index, []).append(r)
         out = []
         for rs in by_region.values():
@@ -252,11 +304,32 @@ class StampRecognizer:
             )
         return out
 
+    def decide_best(self, readings: list[Reading], active: Sequence[str]) -> Result:
+        """Pooled decision, unless one region alone is clearly a stamp.
+
+        Pooling every region lets clutter elsewhere in the frame (belt,
+        clothing, print) eat the margin of a clearly read stamp; a region
+        accepted on its own is trusted when no other region is accepted as
+        a different code.
+        """
+        pooled = self.decide(readings, active)
+        if pooled.stamp is not None:
+            return pooled
+        groups: dict[tuple[int, tuple[int, int, int, int]], list[Reading]] = {}
+        for r in readings:
+            groups.setdefault((r.image_index, r.box), []).append(r)
+        if len(groups) < 2:
+            return pooled
+        acc = [res for rs in groups.values() if (res := self.decide(rs, active)).stamp is not None]
+        if acc and len({a.stamp for a in acc}) == 1:
+            return max(acc, key=lambda a: a.confidence)
+        return pooled
+
     def score_reading(self, r: Reading, active: Sequence[str]) -> dict[str, float]:
         tess = match_scores([r.text], active) if r.text else {c: 0.0 for c in active}
         tw = 0.55 + 0.45 * r.ocr_conf
         wt, wg, ww = self.weights
-        glyph = GlyphScorer.code_scores(r.glyph_pos, active) if wg else {}
+        glyph = GlyphScorer.code_scores(r.glyph_pos, active, r.glyph_pos2) if wg else {}
         whole = GlyphScorer.whole_code_scores(r.line, active) if ww else {}
         return {
             c: wt * tess[c] * tw
