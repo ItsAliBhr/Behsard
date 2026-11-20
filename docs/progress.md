@@ -533,7 +533,48 @@ belt) is not re-read. No L/R pairing is needed (a stamp is on one side).
 - Released as **v0.2.2** (CI green: tests on Ubuntu, Windows build +
   clean-runner acceptance).
 
+## Workshop field test feedback (v0.2.3, 2026-11-20)
+
+User report from the real site: (1) live video extremely slow and nothing
+detected, (2) UI weak/confusing, (3) some stamps have a single digit.
+Footage: release `field-data-1` (3 videos: 161004 1280×720 wide view,
+162246 3200×1800 near a conveyor curve with a blue belt, 172015 3200×1800
+table test). Stamps seen: A24 (blue ink on white "Red Apple" cartons).
+
+Findings and changes:
+- **No detection**: the general ink map (darker + less yellow) marks red/black
+  print, people and machinery on white cartons, so the stamp never ranked
+  into the read slots. New strict blue-ink candidates (`blue_ink_map`, HSV
+  hue 95–135, S ≥ 60) ranked two ways: by isolation (a stamp sits alone on
+  the carton face; belt mesh and clothing are surrounded by more blue) and by
+  plain ink score, `blue_regions: 6` each. Strict shape rules on this mask
+  only: drop hairlines, pair a merged two-letter blob ("A2"+"4") with its
+  neighbour by stroke height. `recognize()` tries the general path first and
+  adds the blue path only when undecided (kept fixture numbers unchanged);
+  `spot()` (live, stamps mode) uses both, per region.
+- **Slow live video**: the preview drew the *last processed* frame, so it
+  updated only once per read (~1 s). It now draws the newest camera frame
+  with the latest marks. Replay now plays like a live camera by default
+  ("every frame" is an option on the setup page). `spot()` runs Tesseract
+  on the 2 best lines (was 4): 0.43 s vs 0.71 s per 3200×1800 frame here,
+  same results; Tesseract (a process per call) is half the read time.
+- **Single-digit stamps**: codes `A5` accepted (`^[A-Z][0-9]{1,2}$`); glyph
+  reader also segments 2 glyphs when a short code is active; fuzzy match
+  uses 2-windows with a stronger penalty (A1 vs A15). Synthetic check (80
+  imgs, half short codes): short 14/30 auto-accepted, 1 error; 3-char 19/39,
+  1 error. Assumption: the stamp shows `A5` (not `A05`); asked the user.
+- Hard frames (7 stills, A24): 0/7 → 4/7 read, 0 wrong.
+- Through the UI (replay, realtime pace, stamp list A24 A21 A14 B24 A12 C15,
+  full frame): 162246 → 1 carton (A24); 172015 → 5 (4 A24 + 1 review A24);
+  161004 → 5 (4 A24 + 1 review A24). Before: 0 everywhere. 0 wrong codes.
+  True carton counts per video not yet known (asked the user).
+- Regression fixtures unchanged: frames 0.50 / top-1 0.82, images 4/4.
+- Open: UI confusion (waiting for the user's specifics), true counts.
+
 ## Decisions
+- **Blue-ink path is a fallback in `recognize()`** but always on in `spot()`:
+  keeps the tuned kraft results while reading white cartons live.
+- **Replay defaults to live pacing**: what the user sees matches a real camera.
 
 - **Timestamps** are naive local site time stored as ISO strings. Single site,
   single time zone; avoids tz bookkeeping. Jalali conversion only in the UI.
